@@ -21,6 +21,26 @@ struct LocalDataStore {
         try insertSeed(now: now)
     }
 
+    /// Regenerates the time-relative seed content (invites and club events) when every
+    /// invite has expired, e.g. reopening the app the next day. Keeps the user's
+    /// schedule, friends, club membership and Verified Member state. Returns true if it refreshed.
+    @discardableResult
+    func refreshIfStale(now: Date) throws -> Bool {
+        let invites = try context.fetch(FetchDescriptor<OpenInvite>())
+        guard invites.allSatisfy({ $0.isExpired(at: now) }) else { return false }
+
+        try context.delete(model: OpenInvite.self)
+        try context.delete(model: ClubEvent.self)
+        SampleData.invites(now: now).forEach(context.insert)
+        SampleData.events(now: now).forEach(context.insert)
+        // RSVPs pointed at the invites we just removed.
+        for user in try context.fetch(FetchDescriptor<UserProfile>()) {
+            user.rsvpedInviteIDs = []
+        }
+        try context.save()
+        return true
+    }
+
     /// Wipes everything and reseeds. Invite and event times are regenerated relative to `now`.
     func resetToSeed(now: Date) throws {
         try context.delete(model: UserProfile.self)

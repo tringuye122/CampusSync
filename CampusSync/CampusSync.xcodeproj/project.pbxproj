@@ -74,6 +74,7 @@
 				Models/WidgetSnapshot.swift,
 				Support/AppClock.swift,
 				Support/AppGroupManager.swift,
+				Support/Theme.swift,
 			);
 			target = F43529E7307A8FF300E76BB5 /* ScheduleWidgetExtension */;
 		};

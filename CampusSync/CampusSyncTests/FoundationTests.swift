@@ -44,6 +44,26 @@ struct FoundationTests {
         #expect(remaining.allSatisfy { !$0.isExpired(at: later) })
     }
 
+    @Test func staleSeedInvitesRefreshWithoutLosingUserData() async throws {
+        let container = SampleData.previewContainer(now: tuesdayNoon)
+        let store = LocalDataStore(context: container.mainContext)
+        let invites = LocalInviteRepository(context: container.mainContext)
+        let clubs = LocalClubRepository(context: container.mainContext)
+        let user = try await LocalUserRepository(context: container.mainContext).currentUser()
+        try await clubs.payDues(clubID: SampleData.robotsClubID)
+
+        // Fresh data is left alone.
+        #expect(try store.refreshIfStale(now: tuesdayNoon) == false)
+
+        // A day later every invite has expired, so the seed content is regenerated.
+        let nextDay = tuesdayNoon.addingTimeInterval(24 * 3600)
+        #expect(try await invites.activeInvites(now: nextDay).isEmpty)
+        #expect(try store.refreshIfStale(now: nextDay) == true)
+        #expect(try await invites.activeInvites(now: nextDay).count == 6)
+        #expect(try await clubs.events(now: nextDay).count == 5)
+        #expect(user.isVerifiedMember)
+    }
+
     @Test func rsvpTogglesAndRespectsCapacity() async throws {
         let container = SampleData.previewContainer(now: tuesdayNoon)
         let invites = LocalInviteRepository(context: container.mainContext)
