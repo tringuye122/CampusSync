@@ -82,9 +82,11 @@ final class LocalUserRepository: UserRepository {
 @MainActor
 final class LocalScheduleRepository: ScheduleRepository {
     private let context: ModelContext
+    private let ratings: ProfessorRatingProvider
 
-    init(context: ModelContext) {
+    init(context: ModelContext, ratings: ProfessorRatingProvider) {
         self.context = context
+        self.ratings = ratings
     }
 
     func classes() async throws -> [ClassSchedule] {
@@ -108,8 +110,8 @@ final class LocalScheduleRepository: ScheduleRepository {
         return all.filter { friendIDs.contains($0.id) }
     }
 
-    func professorInfo(for instructor: String) async -> ProfessorInfo? {
-        SampleData.professors[instructor]
+    func professorRating(for instructor: String) async -> ProfessorRatingLookup {
+        await ratings.rating(for: instructor)
     }
 
     private func currentUser() throws -> UserProfile {

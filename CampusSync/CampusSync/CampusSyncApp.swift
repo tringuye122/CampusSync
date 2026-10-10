@@ -43,7 +43,11 @@ struct CampusSyncApp: App {
                 .environment(services)
                 .environment(router)
                 .onOpenURL { router.open($0) }
-                .task { await services.syncWidget() }
+                .task {
+                    await services.syncWidget()
+                    // Cache RateMyProfessors ratings now so the rating sheet works offline later.
+                    await services.warmProfessorRatings()
+                }
         }
         .modelContainer(container)
         .onChange(of: scenePhase) { _, phase in

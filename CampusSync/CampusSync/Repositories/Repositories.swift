@@ -30,8 +30,8 @@ protocol ScheduleRepository {
     func loadDemoSchedule() async throws
     /// Only friends the user has added.
     func friends() async throws -> [FriendProfile]
-    /// Mock rating lookup by instructor name. Demo data, not real scores.
-    func professorInfo(for instructor: String) async -> ProfessorInfo?
+    /// RateMyProfessors rating for an instructor (cached; works offline once fetched).
+    func professorRating(for instructor: String) async -> ProfessorRatingLookup
 }
 
 protocol InviteRepository {

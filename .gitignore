@@ -63,3 +63,7 @@ fastlane/test_output
 
 # macOS
 .DS_Store
+
+# Real schedule PDFs contain a student name and ID. Never commit them.
+LocalFixtures/
+*.pdf

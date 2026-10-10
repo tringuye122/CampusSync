@@ -5,7 +5,9 @@
 //  Seed data. The demo runs fully offline from this file. The demo user's class
 //  schedule has the real shape of the sample ConnectCarolina PDF (spec section 7),
 //  so importing that PDF and "Load demo schedule" give the same result.
-//  Everything else is fictional. Professor ratings are invented ("Demo data").
+//  Instructor names are the real ones from that schedule; their ratings are NOT
+//  stored here but fetched from RateMyProfessors (see Ratings/). Everything else
+//  (friends, invites, clubs) is fictional.
 //
 
 import Foundation
@@ -43,24 +45,6 @@ enum SampleData {
         )
     }
 
-    // MARK: Professors (invented values)
-
-    /// Keyed by instructor name. Placeholder names until the real PDF is imported.
-    static let professors: [String: ProfessorInfo] = [
-        "Avery Chen": ProfessorInfo(
-            name: "Avery Chen", overallRating: 4.4, difficulty: 3.8,
-            wouldTakeAgainPercent: 88, topTags: ["Hands-on", "Clear grading", "Lots of projects"]),
-        "Rowan Alvarez": ProfessorInfo(
-            name: "Rowan Alvarez", overallRating: 3.9, difficulty: 3.2,
-            wouldTakeAgainPercent: 74, topTags: ["Engaging", "Tough exams"]),
-        "Priya Raman": ProfessorInfo(
-            name: "Priya Raman", overallRating: 4.7, difficulty: 4.1,
-            wouldTakeAgainPercent: 93, topTags: ["Inspirational", "Heavy workload", "Caring"]),
-        "Marcus Bell": ProfessorInfo(
-            name: "Marcus Bell", overallRating: 4.1, difficulty: 2.6,
-            wouldTakeAgainPercent: 85, topTags: ["Funny", "Accessible outside class"]),
-    ]
-
     // MARK: Classes (shape of the sample PDF, Fall 2026, 08/17 to 12/11)
 
     static func classes() -> [ClassSchedule] {
@@ -71,22 +55,22 @@ enum SampleData {
                 courseCode: "COMP 523", title: "Software Engineering Lab", section: "001", units: 4,
                 weekdays: [.mon, .wed], startMinutes: minutes(13, 25), endMinutes: minutes(14, 40),
                 building: "Sitterson Hall", room: "FB009", startDate: start, endDate: end,
-                instructors: ["Avery Chen"], professor: professors["Avery Chen"]),
+                instructors: ["Paul Stotts", "Louie Lu"]),
             ClassSchedule(
                 courseCode: "COMP 433", title: "Mobile Computing Systems", section: "001", units: 3,
                 weekdays: [.tue, .thu], startMinutes: minutes(11), endMinutes: minutes(12, 15),
                 building: "Sitterson Hall", room: "SN014", startDate: start, endDate: end,
-                instructors: ["Rowan Alvarez"], professor: professors["Rowan Alvarez"]),
+                instructors: ["Shahriar Nirjon", "Louie Lu", "Tarik Reza Toha", "Zhenyu Wang"]),
             ClassSchedule(
                 courseCode: "COMP 577", title: "Intro to Computer Vision", section: "001", units: 3,
                 weekdays: [.tue, .thu], startMinutes: minutes(15, 30), endMinutes: minutes(16, 45),
                 building: "Sitterson Hall", room: "FB009", startDate: start, endDate: end,
-                instructors: ["Priya Raman"], professor: professors["Priya Raman"]),
+                instructors: ["Roni Sengupta", "Baiqi Li", "Jun Myeong Choi"]),
             ClassSchedule(
                 courseCode: "LING 460", title: "Textual Analysis with R", section: "001", units: 3,
                 weekdays: [.tue, .thu], startMinutes: minutes(17), endMinutes: minutes(18, 15),
                 building: "Fetzer Hall", room: "0109", startDate: start, endDate: end,
-                instructors: ["Marcus Bell"], professor: professors["Marcus Bell"]),
+                instructors: ["Daoxin Li", "Onthada Preedasawakul"]),
         ]
     }
 

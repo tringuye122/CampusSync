@@ -26,11 +26,11 @@ struct FoundationTests {
 
     @Test func seedHasDemoScheduleAndFriends() async throws {
         let container = SampleData.previewContainer(now: tuesdayNoon)
-        let schedule = LocalScheduleRepository(context: container.mainContext)
+        let schedule = LocalScheduleRepository(context: container.mainContext, ratings: PreviewRatingProvider())
         let classes = try await schedule.classes()
         #expect(Set(classes.map(\.courseCode)) == ["COMP 523", "COMP 433", "COMP 577", "LING 460"])
         #expect(try await schedule.friends().count == 3)
-        #expect(classes.allSatisfy { $0.primaryInstructor != nil && $0.professor != nil })
+        #expect(classes.allSatisfy { $0.primaryInstructor != nil })
     }
 
     @Test func expiredInvitesAreFilteredAtReadTime() async throws {

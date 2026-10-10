@@ -1,6 +1,6 @@
 # CampusSync: HackNC Master Spec
 
-Oct 10, 2026 · @tri
+Oct 10, 2026 · @tri · Revised: live Firebase backend, online demo
 
 ## 1. Overview
 
@@ -10,44 +10,49 @@ CampusSync (working name, lock it before creating bundle IDs) is a native iOS ap
 
 **Four pillars**
 
-- **Schedule engine.** Upload your ConnectCarolina class schedule PDF, parse it on-device into `ClassSchedule` models, and see a weekly timetable with class blocks and free gaps. Tapping a class opens a professor rating sheet (mock data).
+- **Schedule engine.** Upload your ConnectCarolina class schedule PDF, parse it on-device into `ClassSchedule` models, and see a weekly timetable with class blocks and free gaps. Tapping a class opens a professor rating sheet with real RateMyProfessors ratings (cached and credited).
 - **Friend overlap.** Compare two weekly schedules and highlight mutual free windows (`FreeSlot`).
 - **Friend Invites.** Time-boxed plans you send only to friends you have added in the app, tied to campus landmarks (The Pit, Chase Dining Hall, Davis Library) with category tags (Food, Study, Fitness, Social), RSVP, and auto-expiration.
 - **Clubs Hub.** A feed of GBMs and events with access badges (Public, Members Only, Dues Required) and a one-tap Join Club / Pay Dues action.
 
-**Stack:** Swift 5.9+, iOS 17+, SwiftUI, SwiftData, MVVM, WidgetKit, App Groups. Firebase Auth and Firestore are an optional layer behind a repository protocol, added only if time allows.
+**Stack:** Swift 5.9+, iOS 17+, SwiftUI, SwiftData, MVVM, WidgetKit, App Groups, and Firebase Auth + Firestore as the live backend behind repository protocols. SwiftData is the on-device store and cache; Firestore is the source of truth for accounts, friends, invites, clubs and shared schedules. The demo runs online on real accounts and real data.
 
 ## 2. Scope and locked decisions
 
-The demo must run fully offline from seed data; everything networked is optional. These decisions replace the contradictions in the earlier drafts.
+The app is built as a live product, not a mocked demo: real accounts, a real friend graph, and data that syncs between phones. The demo runs online on a physical iPhone. Seed data remains only as a dev, preview, test and fallback aid. These decisions replace the contradictions in the earlier drafts, including the earlier "mock first, Firebase only if time permits" plan.
 
 **Decisions**
 
-1. **Mock data first, Firebase only if time permits.** All data access goes through repository protocols (`InviteRepository`, `ClubRepository`, `ScheduleRepository`). The mock implementation ships first; a Firestore implementation swaps in later.
+1. **Firebase is the live backend.** All data access goes through repository protocols (`UserRepository`, `ScheduleRepository`, `InviteRepository`, `ClubRepository`, plus friend access). The Firestore implementations are the real ones. The local SwiftData implementations stay for previews, tests and offline fallback, and the app must still launch and be usable with no connection.
 2. **Schedule import is a ConnectCarolina PDF upload.** The student prints or saves their class schedule from ConnectCarolina as a PDF and imports it. `.ics` becomes a secondary importer, not the headline.
-3. **No Apple Pay or PassKit.** Dues are a one-tap "Pay Dues" button that flips local state and shows a "Verified Member" badge.
+3. **No Apple Pay or PassKit.** Dues are a one-tap "Pay Dues" button that records a membership in Firestore and shows a "Verified Member" badge. No real payments.
 4. **"Nearby" means tagged to a campus landmark.** No Core Location.
-5. **Widget refresh is local.** The app calls `WidgetCenter.shared.reloadAllTimelines()` on local writes and on foreground. No push notifications.
-6. **One shared container strategy:** a small Codable JSON snapshot in the App Group, not a shared SwiftData store.
+5. **Widget refresh is local.** The app calls `WidgetCenter.shared.reloadAllTimelines()` on local writes, on foreground, and whenever a Firestore listener delivers a change. The widget itself never touches Firebase or the network. Because there are no push notifications in the MVP, the widget shows changes made by friends after the app next runs or foregrounds. Background push is a stretch item.
+6. **One shared container strategy:** a small Codable JSON snapshot in the App Group, not a shared SwiftData store and not a Firebase SDK inside the widget.
+7. **Sign-in is email and password, restricted to `@unc.edu` addresses,** with a verification email, using Firebase Auth. The restriction is enforced in the app and again in Firestore security rules.
+8. **Friends are added by handle search with request and accept.** A student searches a unique `@handle`, sends a request, and the other student accepts. Friend Invites and shared schedules only ever go to accepted friends.
+9. **Professor ratings come from RateMyProfessors.** They are fetched by instructor name, cached on device, credited on screen, and fall back to "no rating". The lookup is unofficial, so it stays isolated behind `ProfessorRatingProvider`.
 
 **Scope table**
 
 | Feature | Tier | MVP approach |
 | --- | --- | --- |
 | PDF schedule import + timetable | MVP | PDFKit text extraction, regex parser, demo schedule fallback |
-| Friend overlap | MVP | Demo friend from seed data; overlap computed locally |
-| Friend Invites feed, RSVP, expiry | MVP | Local store, expired invites filtered at read time |
+| Accounts (Firebase Auth) | MVP | Email and password, `@unc.edu` only, email verification |
+| Friends: search, request, accept | MVP | Firestore handles and friend requests, enforced by security rules |
+| Friend overlap | MVP | Friend's shared meetings read from Firestore; overlap computed locally |
+| Friend Invites feed, RSVP, expiry | MVP | Firestore invites, real-time listener, expired invites filtered at read time |
 | Widget (small, medium, Lock Screen) | MVP | JSON snapshot in App Group, timeline entries at known boundaries |
-| Professor rating sheet | MVP | Hardcoded mock scores in seed data |
-| Clubs feed + access badges | MVP | Seed data, one-tap Join / Pay Dues |
-| Seed data | MVP | Real sample schedule shape plus fictional friends, invites, clubs |
+| Professor rating sheet | MVP | RateMyProfessors lookup, cached on device, credited on screen |
+| Clubs feed + access badges | MVP | Firestore clubs and events, one-tap Join / Pay Dues writes a membership |
+| Firestore security rules + emulator tests | MVP | Written and tested before real users can write |
+| Seed data and seeding script | MVP (dev and demo) | Fictional clubs, events and demo accounts loaded into Firestore by a script; local seed for previews and tests |
 | `.ics` import | Stretch | Simple parser, no recurrence support at first |
-| Firebase Auth + Firestore | Stretch | Behind repository protocols |
-| Real friend requests | Stretch | Needs Firestore rules |
+| Push notifications (FCM) | Stretch | So the widget and club subscribers update without opening the app |
+| Report and block | Stretch | Needed before wide release; mentioned in the pitch |
 | PassKit membership pass | Deferred | Static badge instead |
 | Apple Pay sheet | Deferred | One-tap button instead |
 | Club treasury visualizer | Deferred | Static descriptions |
-| Live RateMyProfessor data | Deferred | Mock scores only |
 
 ## 3. Architecture
 
@@ -61,13 +66,43 @@ The app writes the snapshot after any local change and asks WidgetKit to reload;
 
 - Views talk only to ViewModels, and ViewModels talk only to repository protocols and the logic layer, never to SwiftData directly.
 - The widget target shares only `WidgetSnapshot` and the theme with the app. It does not open the SwiftData store.
-- The mock repositories ship first; Firebase repositories implement the same protocols later.
+- Firestore repositories are the real implementations of the same protocols. The local SwiftData repositories stay for previews, tests and offline fallback.
 
 **Data flows**
 
 1. **Schedule import.** Student picks the ConnectCarolina PDF, PDFKit extracts the text, `ConnectCarolinaPDFParser` produces `ClassSchedule` models, the student confirms them on a review screen, they save to SwiftData, and the app rewrites the snapshot and reloads the widget.
-2. **Schedule overlap.** Student picks a friend, the app loads that friend's classes (seed data now, Firestore later), `OverlapEngine` intersects both free-slot lists on the device, and the overlay view renders the mutual windows.
-3. **Friend invite.** Student posts an invite, the repository saves it, the invites feed refreshes, the app writes the new top invite into the snapshot, and `reloadAllTimelines()` updates the widget. When Firestore is added, its listener triggers the same path.
+2. **Schedule overlap.** Student picks a friend, the app loads that friend's shared meetings from Firestore, `OverlapEngine` intersects both free-slot lists on the device, and the overlay view renders the mutual windows.
+3. **Friend invite.** Student posts an invite, the repository saves it, the invites feed refreshes, the app writes the new top invite into the snapshot, and `reloadAllTimelines()` updates the widget. The Firestore listener delivers other students' invites and triggers the same path, so a friend's new invite reaches the snapshot and widget the next time the app runs.
+
+### Firebase backend
+
+Firebase Auth and Firestore are the source of truth. The app uses the Firebase iOS SDK (Swift Package Manager, `FirebaseAuth` and `FirebaseFirestore` only). The widget target links no Firebase code.
+
+**Auth.** Email and password. The app rejects non-`@unc.edu` addresses, sends a verification email, and blocks Firestore access until the email is verified. Security rules check `request.auth.token.email_verified` and the `@unc.edu` suffix again, so the client is not trusted.
+
+**Firestore data model (proposed)**
+
+| Path | Contents | Who can read | Who can write |
+| --- | --- | --- | --- |
+| `users/{uid}` | displayName, handle, createdAt | Any verified user (needed for handle search) | The owner |
+| `handles/{handle}` | uid | Any verified user | Create-only by the owner, which keeps handles unique |
+| `friendRequests/{id}` | fromUID, toUID, status, createdAt | The two people involved | Sender creates; recipient accepts or declines |
+| `users/{uid}/friends/{friendUID}` | since | The owner | Written for both people in one batch when a request is accepted, allowed only if an accepted request exists |
+| `schedules/{uid}` | meetings: weekday, start and end minutes, building, course code | The owner and accepted friends | The owner |
+| `invites/{id}` | hostID, hostName, title, landmark, category, startTime, expiresAt, attendeeIDs, recipientIDs, capacity | The host and the listed recipients | Host creates, with `hostID == auth.uid`, `expiresAt > startTime`, and capacity bounds; recipients may only add or remove themselves in `attendeeIDs` |
+| `clubs/{clubID}` and `clubs/{clubID}/events/{eventID}` | name, summary, access, duesAmount; event details | Any verified user | Admin script only |
+| `users/{uid}/memberships/{clubID}` | joinedAt, duesPaid | The owner | The owner |
+
+Notes on the model:
+- The shared schedule document holds meeting times only. It never holds course titles, instructor names, the student's name, or any university ID, so a friend sees when you are busy and nothing more.
+- Query invites with `recipientIDs array-contains uid` and `expiresAt > now`, backed by a composite index. Clients also filter expired invites at read time, and a Firestore TTL policy on `expiresAt` deletes old documents.
+- The existing models map across: `OpenInvite` to `invites`, `FriendProfile` to a cached copy of a friend's `schedules` document, `UserProfile.friendIDs` to the `friends` subcollection, and `Club` and `ClubEvent` to `clubs` and `events`.
+
+**Sync.** Each Firestore repository exposes an async API plus a snapshot listener. ViewModels consume the listener, the repository mirrors results into the local store for offline use, and any change triggers the widget snapshot rewrite and `reloadAllTimelines()`. Firestore's offline persistence is on, so recently seen data keeps working with no connection.
+
+**Security rules.** Rules live in the repo (`firebase/firestore.rules`) with indexes (`firebase/firestore.indexes.json`) and are tested in the Firebase emulator before any real write is allowed. `GoogleService-Info.plist` and any service account key are never committed.
+
+**Scale notes.** Listeners are scoped to the signed-in user's own invites, friends and requests, never whole collections. Denormalize `hostName` onto invites to avoid joins. Paginate the clubs feed. Keep the Spark (free) plan limits in mind for the demo, and treat App Check and a cost review as a pre-launch item.
 
 ## 4. Schedule import (ConnectCarolina PDF)
 
@@ -127,13 +162,13 @@ SwiftData `@Model` classes hold the app's persistent state, while a separate pla
 
 | Model | Type | Key fields | Notes |
 | --- | --- | --- | --- |
-| `UserProfile` | `@Model` | id, displayName, handle, joinedClubIDs, rsvpedInviteIDs, isVerifiedMember | The signed-in user; one demo user in MVP |
+| `UserProfile` | `@Model` | id, displayName, handle, friendIDs, joinedClubIDs, rsvpedInviteIDs, isVerifiedMember | The signed-in user, mirrored from Firebase Auth and Firestore |
 | `ClassSchedule` | `@Model` | courseCode, title, section, units, weekdays, startMinutes, endMinutes, building, room, startDate, endDate, professor | One row per course; repeats weekly between start and end dates |
-| `ProfessorInfo` | `Codable` struct, embedded | name, overallRating, difficulty, wouldTakeAgainPercent, topTags | Embedded in `ClassSchedule`, not its own table; looked up by name from seed data |
+| `ProfessorInfo` | `Codable` struct, embedded | name, overallRating, difficulty, wouldTakeAgainPercent, topTags | Unused. Superseded by `ProfessorRating`, a non-persisted value fetched from RateMyProfessors and cached on device |
 | `FreeSlot` | plain struct | weekday, startMinutes, endMinutes, label | Computed, never persisted; used by timetable and overlap |
 | `OpenInvite` | `@Model` | id, title, landmark, category, startTime, expiresAt, hostName, attendeeIDs, capacity | Expired when now > expiresAt; filtered at read time |
 | `ClubEvent` | `@Model` | id, clubName, title, details, location, startTime, access, duesAmount | `access` is an enum: public, membersOnly, duesRequired |
-| `FriendProfile` | `@Model` | id, displayName, classes | Demo friend for the overlap view |
+| `FriendProfile` | `@Model` | id, displayName, classes | Local cache of an accepted friend's shared meetings, synced from Firestore, used by the overlap view |
 | `WidgetSnapshot` | `Codable` | nextBlock, topInvite, generatedAt | Written as JSON to the App Group; the widget reads only this |
 
 **Supporting enums:** `Weekday`, `InviteCategory` (food, study, fitness, social, each with color and symbol), `ClubAccess`, `Landmark` (The Pit, Chase Dining Hall, Davis Library, and so on, each with a display name and symbol).
@@ -141,7 +176,7 @@ SwiftData `@Model` classes hold the app's persistent state, while a separate pla
 **Decisions to confirm**
 
 - Store invite expiry as an absolute `Date`, not a duration, so the widget can compute it without the app running.
-- Keep `ProfessorInfo` out of SwiftData so changing mock scores never needs a migration.
+- Keep rating data out of SwiftData so RateMyProfessors changes never need a migration.
 
 ## 6. Features, screens, and design system
 
@@ -173,7 +208,7 @@ Support dark mode from the start by using asset-catalog colors instead of hard-c
 
 **Tab 3: Friend Invites**
 
-- Feed grouped by time, each card showing landmark, category pill, countdown, attendee count, and an RSVP button that toggles. Only friends you have added can be invited; the poster picks who gets each plan. In the demo, friends come from seed data and a real add-friend flow is stretch.
+- Feed grouped by time, each card showing landmark, category pill, countdown, attendee count, and an RSVP button that toggles. Only friends you have added can be invited; the poster picks who gets each plan. Friends are added through handle search with request and accept.
 - Floating "+ Post" opens a compose sheet: title, landmark picker, category, start time, duration. Defaults should make posting a two-tap action.
 - Cards disappear when `expiresAt` passes.
 
@@ -189,9 +224,9 @@ Support dark mode from the start by using asset-catalog colors instead of hard-c
 - The `TimelineProvider` builds several entries ahead of time, one at each boundary (a class starting, a class ending, an invite expiring), and sets a reload policy for the next boundary. It cannot update continuously.
 - The app calls `reloadAllTimelines()` after any local write (new invite, RSVP, import). Tapping the widget deep-links to the relevant tab.
 
-## 7. Seed data and demo plan
+## 7. Demo data and demo plan
 
-The demo user's schedule should be the real sample schedule, so the PDF import and the "Load demo schedule" fallback produce the same result. Everything else is fictional.
+The demo runs online against the real Firebase project with real accounts. Seed data supports development and the safety net, and a seeding script loads the fictional clubs and events into Firestore, since there is no admin screen. The demo user's schedule is the real sample schedule, so the PDF import and the "Load demo schedule" fallback produce the same result.
 
 **Demo user schedule (from the sample PDF, Fall 2026, 08/17 to 12/11)**
 
@@ -204,16 +239,17 @@ The demo user's schedule should be the real sample schedule, so the PDF import a
 
 This schedule produces useful gaps for the demo: Tuesdays and Thursdays have a 3 h 15 min gap from 12:15 PM to 3:30 PM and a 15-minute scramble from 4:45 PM to 5:00 PM. Mondays and Wednesdays are free until 1:25 PM, and Fridays are entirely free.
 
-**Fictional seed content**
+**Demo data setup (do this before recording)**
 
-- **Friends:** two or three demo friends with schedules built to overlap your Tuesday/Thursday afternoon gap, so the overlap view always shows a clear mutual window.
-- **Professor ratings:** invented values for each primary instructor, shown with a visible "Demo data" footer. Do not present them as real RateMyProfessor scores.
-- **Friend invites:** 5 to 6, with start times defined relative to launch time (now plus 20 min, plus 45 min, and so on) so they are never expired when judges open the app. Mix categories and landmarks: Chase Dining Hall dinner, Davis Library study group, The Pit hangout, a pickup game.
-- **Clubs:** 4 to 5 invented organizations, one per access type, with upcoming GBMs and events. Avoid names of real student orgs.
+- **Accounts:** create two or three real `@unc.edu` test accounts ahead of time (one per device or simulator), verify their emails, and make them friends through the real request and accept flow.
+- **Schedules:** each account imports a schedule so the overlap view has a clear mutual window. The main account imports the real sample PDF. The others can use the demo schedule or a PDF of their own. Share only meetings, as described in the data model.
+- **Professor ratings:** real RateMyProfessors ratings, fetched and cached before the demo so they appear instantly, shown with the RateMyProfessors credit.
+- **Clubs:** 4 to 5 invented organizations, one per access type, with upcoming GBMs and events, loaded into Firestore by the seeding script. Avoid names of real student orgs.
+- **Friend invites:** post a few real invites just before the recording so none are expired when the demo runs. The seeding script can also create a batch with times relative to the run.
 
 **Demo script (90 seconds)**
 
-1. Open the app on the Home tab: live status banner shows the current gap and the next class.
+1. Open the app on the Home tab, already signed in: live status banner shows the current gap and the next class.
 2. Import the ConnectCarolina PDF and show the parsed timetable.
 3. Open Friend Overlap and show the mutual free window.
 4. Tap "Make an invite for this slot" and send a Friend Invite.
@@ -224,7 +260,8 @@ This schedule produces useful gaps for the demo: Tuesdays and Thursdays have a 3
 **Demo safety net**
 
 - A hidden developer menu (triple-tap the profile avatar) with a time override, so the demo can run "as if it is Tuesday at 12:30 PM" regardless of the real clock.
-- A reset-to-seed button that regenerates relative invite times.
+- A reset-demo-data action and a seeding script that recreate the clubs, events and invites with fresh times.
+- Local fallback: the SwiftData repositories and seed data still work with no connection, so a network failure degrades the app instead of breaking it.
 - A pre-recorded screen capture of the full flow, in case the device or Wi-Fi fails.
 
 ## 8. Build order, files, and team split
@@ -234,24 +271,27 @@ Build the vertical slice that powers the demo first, then add features in order 
 | Phase | Goal | Files | Suggested owner | Est. hours |
 | --- | --- | --- | --- | --- |
 | 0. Setup | Project, widget target, App Group, shared entitlements | Xcode targets, `AppGroupManager.swift` | Both | 1 |
-| 1. Foundation | Models, theme, seed data, repository protocols | `Models.swift`, `Theme.swift`, `SampleData.swift`, `Repositories.swift` | Person A | 3 |
+| 1. Foundation | Models, theme, clock, seed data, repository protocols | `Models.swift`, `Theme.swift`, `AppClock.swift`, `SampleData.swift`, `Repositories.swift` | Person A | 3 |
 | 2. Shell | Four-tab navigation with placeholder screens | `MainTabView.swift`, `HomeDashboardView.swift` | Person B | 2 |
 | 3. Schedule | Timetable grid, free-slot calculation, professor sheet | `TimetableView.swift`, `ScheduleViewModel.swift`, `ProfessorRatingSheet.swift` | Person A | 5 |
 | 4. Friend Invites | Feed, card, compose, RSVP, expiry | `OpenInviteCardView.swift`, `InvitesViewModel.swift`, `ComposeInviteSheet.swift` | Person B | 5 |
 | 5. Widget | Snapshot writer, timeline provider, all families | `ScheduleWidget.swift`, `WidgetSnapshot.swift` | Person B | 5 |
-| 6. PDF import | Parser, confirmation screen, demo fallback | `ScheduleImporter.swift`, `ConnectCarolinaPDFParser.swift`, `ImportReviewView.swift` | Person A | 5 |
-| 7. Overlap | Overlap algorithm and view | `FriendScheduleOverlayView.swift`, `OverlapEngine.swift` | Person A | 3 |
-| 8. Clubs | Feed, access badges, Pay Dues state | `ClubEventCardView.swift`, `ClubsViewModel.swift` | Person B | 3 |
-| 9. Polish | Dark mode, empty states, dev menu, time override, demo recording | Dev menu, assets | Both | 4 |
-| 10. Stretch | `.ics` import, Firestore repositories, Auth | `ICSParser.swift`, Firebase repositories | Whoever is free | Optional |
+| 6. PDF import | Parser, review screen, demo fallback, RateMyProfessors ratings | `ConnectCarolinaPDFParser.swift`, `ImportReviewView.swift`, `RateMyProfessorClient.swift` | Person A | 5 |
+| 7. Firebase foundation | Firebase project and SDK, Auth sign up and sign in (`@unc.edu`), user profile and handles, security rules and emulator tests | `firebase/firestore.rules`, auth views, `AuthService.swift` | Both | 6 |
+| 8. Sync and friends | Friend search, request and accept, Firestore repositories for schedule, invites and clubs, listeners feeding the snapshot writer, seeding script | `Firestore*Repository.swift`, friends views, `firebase/seed` | Both | 8 |
+| 9. Overlap | Overlap algorithm and view over real friends' schedules | `FriendScheduleOverlayView.swift`, `OverlapEngine.swift` | Person A | 3 |
+| 10. Clubs | Feed over Firestore, access badges, Join and Pay Dues memberships | `ClubEventCardView.swift`, `ClubsViewModel.swift` | Person B | 3 |
+| 11. Polish | Dark mode, empty states, dev menu, time override, demo recording | Dev menu, assets | Both | 4 |
+| 12. Stretch | `.ics` import, push notifications (FCM), report and block, App Check | `ICSParser.swift`, push setup | Whoever is free | Optional |
 
-**Cut order if time runs short:** Clubs polish, then overlap polish, then PDF import (fall back to demo schedule), then widget families beyond small and medium. Do not cut the widget or Friend Invites; they are the pitch.
+**Cut order if time runs short:** Clubs polish, then overlap polish, then PDF import (fall back to demo schedule), then widget families beyond small and medium. Do not cut the widget, Friend Invites, or real accounts and sync; they are the pitch. If Firebase work slips, the local repositories and seed data remain as the fallback, but the plan is to demo on real networking.
 
 **Working agreements**
 
 - Agree on `Models.swift` before either person builds views, and treat it as frozen after phase 1 except for additive fields.
 - Commit to separate files per feature to avoid merge conflicts in the Xcode project file; use one person to add targets and capabilities.
 - Test on a physical device by phase 5, since widgets and Lock Screen behavior are unreliable in the simulator.
+- Write and emulator-test the Firestore security rules before enabling any real write. Never commit `GoogleService-Info.plist` or a service account key.
 
 ## 9. Improvements, risks, and polish
 
@@ -260,28 +300,34 @@ The highest-risk items are the PDF parser, the widget behavior on a real device,
 | # | Area | Issue | Fix | Priority |
 | --- | --- | --- | --- | --- |
 | 1 | PDF parsing | Parser is designed from one sample; text extraction order from PDFKit is untested | Run PDFKit on the sample in hour one, print the raw string, and write the regexes against it | Must fix |
-| 2 | Demo clock | Today is a Saturday, so "next class" and "free now" would show Monday; invites expire in real time | Add a time override and relative seed times (section 7) | Must fix |
+| 2 | Demo clock | Today is a Saturday, so "next class" and "free now" would show Monday; invites expire in real time | Add a time override and relative invite times in the seeding script (section 7) | Must fix |
 | 3 | Lock Screen | `systemSmall` and `systemMedium` do not appear on the Lock Screen | Add the three accessory families | Must fix |
 | 4 | Widget refresh | Widgets cannot update continuously; reload budgets are limited | Pre-build timeline entries at class and invite boundaries; reload on local writes | Must fix |
 | 5 | Real-world schedules | Sample has four simple courses; real PDFs include `TBA` times, online sections, multiple meeting rows per course, Saturday classes | Handle `TBA`/missing times by skipping the row, support multiple meetings per course, and show a review screen before saving | Should fix |
 | 6 | Free-slot rules | A 15-minute gap is not usable free time, and campus walking time is ignored | Set a minimum gap (for example 30 min), a waking-hours window (for example 8 AM to 10 PM), and a configurable walking buffer | Should fix |
 | 7 | Privacy | The PDF contains the student's name and university ID; friend schedules are sensitive | Parse only the term and courses, never store the ID, exclude real PDFs from git, and show "share my schedule with" controls | Should fix |
 | 8 | Invite safety | Open posts to a whole campus invite spam and meeting strangers | Default to friends-only visibility, keep public landmarks only, add a report button; mention this in the pitch | Should fix |
-| 9 | Professor data | The Instructor field includes co-instructors and TAs; mock ratings could be read as real | Use first-listed name, label "Instructor", and show a "Demo data" footer | Should fix |
+| 9 | Professor data | The Instructor field includes co-instructors and TAs; a name match on RateMyProfessors can pick the wrong person | Use first-listed name, label "Instructor", match on full name, link to the RateMyProfessors page, and say the match is by name | Should fix |
 | 10 | Semester breaks | Dates cover 08/17 to 12/11 but not holidays or fall break | Ignore for MVP; note as a future calendar-feed integration | Later |
 | 11 | Accessibility | Color-coded pills and dense timetable grid | Pair color with symbols, support Dynamic Type, add VoiceOver labels to class blocks | Should fix |
-| 12 | Firebase | Real-time sync needs security rules, friend permissions, and a Wi-Fi-independent demo | Keep behind repository protocols; write rules before enabling public writes | Later |
+| 12 | Firebase | Real-time sync needs security rules, friend permissions, and a plan for a flaky network | Keep behind repository protocols; write and emulator-test rules before enabling writes; keep local fallback and a recorded demo | Must fix |
 | 13 | Snapshot versioning | App and widget can disagree after an update | Include a `version` field in `WidgetSnapshot` and fail safe to an empty state | Later |
 | 14 | Naming and IDs | `group.com.yourname.app` is a placeholder; it must match in both entitlements and in code | Pick the final name and bundle ID before creating targets | Must fix |
+| 15 | Account abuse | Anyone could sign up and search for people | Restrict to verified `@unc.edu` emails in the app and in rules; searchable fields limited to handle and display name | Must fix |
+| 16 | Schedule sharing | Friends' schedules are sensitive | Share meeting times only, to accepted friends only; never course titles, instructors, or IDs; provide a way to stop sharing | Must fix |
+| 17 | RateMyProfessors | No official API; the unofficial lookup may change or stop | Isolate behind `ProfessorRatingProvider`, cache results, credit the source, degrade to "no rating" | Should fix |
+| 18 | Cost and scale | Listeners and reads grow with users | Scope listeners to the user's own data, paginate, use TTL cleanup; review quota and add App Check before launch | Later |
 
 **Pitch polish**
 
 - Lead with the problem in one sentence ("you have a free gap and so do your friends, but nobody knows") and show the widget in the first ten seconds.
-- Pitch the PDF upload as zero-setup onboarding: no calendar permissions, no account linking, everything parsed on the device.
-- Name the next steps honestly: friend graph, real sync, other universities' schedule formats.
+- Pitch the PDF upload as zero-setup onboarding: no calendar permissions, no account linking, everything parsed on the device. Be clear that only meeting times are shared, and only with friends you accept.
+- Name the next steps honestly: push notifications, report and block, other universities' schedule formats.
 
 **Open questions for the team**
 
-- Decided: the demo is a recorded run on a physical iPhone with Wi-Fi. Test widgets and the Lock Screen on that device early, since signing and App Group setup can differ by account type. Wi-Fi lowers the risk of adding Firestore, but keep seed data as the default so the recording never depends on it.
-- Decided: club events go to everyone who has joined or subscribed to the club, while Friend Invites go only to friends you have added, whom you invite through the app. Club events are public and subscribers are notified.
-- Final app name?
+- Decided: the demo is a recorded run on a physical iPhone with Wi-Fi, online, on real Firebase data. Test widgets and the Lock Screen on that device early, since signing and App Group setup can differ by account type.
+- Decided: Firebase Auth and Firestore are the live backend. Sign-in is email and password restricted to `@unc.edu`; friends are added by handle search with request and accept.
+- Decided: club events go to everyone who has joined or subscribed to the club, while Friend Invites go only to friends you have added, whom you invite through the app. Club events are public and subscribers are notified once push notifications exist.
+- Open: who creates and owns the Firebase project and billing account, and which plan the demo runs on.
+- Open: final app name. Lock it before creating the Firebase iOS app and bundle ID.

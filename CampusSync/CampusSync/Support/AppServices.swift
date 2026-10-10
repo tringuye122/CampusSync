@@ -25,11 +25,16 @@ final class AppServices {
     /// The clock the widget snapshot's `clockOffset` is read from.
     let clock: AppClock
 
-    init(context: ModelContext, clock: AppClock = AppClock(), retaining container: ModelContainer? = nil) {
+    init(
+        context: ModelContext,
+        clock: AppClock = AppClock(),
+        ratings: ProfessorRatingProvider = CachedProfessorRatingProvider.live(),
+        retaining container: ModelContainer? = nil
+    ) {
         self.clock = clock
         retainedContainer = container
         users = LocalUserRepository(context: context)
-        schedule = LocalScheduleRepository(context: context)
+        schedule = LocalScheduleRepository(context: context, ratings: ratings)
         invites = LocalInviteRepository(context: context)
         clubs = LocalClubRepository(context: context)
         store = LocalDataStore(context: context)
@@ -49,9 +54,31 @@ final class AppServices {
         }
     }
 
-    /// Seeded in-memory services for previews.
+    /// Fetches ratings for every primary instructor in the background so they are cached
+    /// before the rating sheet is opened (and keep working offline afterward).
+    func warmProfessorRatings() async {
+        guard let classes = try? await schedule.classes() else { return }
+        var seen = Set<String>()
+        for name in classes.compactMap(\.primaryInstructor) where seen.insert(name).inserted {
+            _ = await schedule.professorRating(for: name)
+        }
+    }
+
+    /// Seeded in-memory services for previews. Never touches the network: ratings
+    /// come from a fixed stub.
     static func preview(now: Date = Date()) -> AppServices {
         let container = SampleData.previewContainer(now: now)
-        return AppServices(context: container.mainContext, retaining: container)
+        return AppServices(
+            context: container.mainContext, ratings: PreviewRatingProvider(), retaining: container)
     }
+}
+
+/// Fixed ratings for previews and tests, so they never hit the network.
+struct PreviewRatingProvider: ProfessorRatingProvider {
+    var result: ProfessorRatingLookup = .found(
+        ProfessorRating(
+            legacyID: 1, firstName: "Alex", lastName: "Example", department: "Computer Science",
+            overallRating: 4.1, difficulty: 3.2, wouldTakeAgainPercent: 82, numRatings: 37))
+
+    func rating(for instructor: String) async -> ProfessorRatingLookup { result }
 }
