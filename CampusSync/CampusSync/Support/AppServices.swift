@@ -19,8 +19,11 @@ final class AppServices {
     let clubs: ClubRepository
     /// Seed and reset hooks for the dev menu.
     let store: LocalDataStore
+    /// Keeps an in-memory preview container alive; a ModelContext does not own its container.
+    private let retainedContainer: ModelContainer?
 
-    init(context: ModelContext) {
+    init(context: ModelContext, retaining container: ModelContainer? = nil) {
+        retainedContainer = container
         users = LocalUserRepository(context: context)
         schedule = LocalScheduleRepository(context: context)
         invites = LocalInviteRepository(context: context)
@@ -30,6 +33,7 @@ final class AppServices {
 
     /// Seeded in-memory services for previews.
     static func preview(now: Date = Date()) -> AppServices {
-        AppServices(context: SampleData.previewContainer(now: now).mainContext)
+        let container = SampleData.previewContainer(now: now)
+        return AppServices(context: container.mainContext, retaining: container)
     }
 }

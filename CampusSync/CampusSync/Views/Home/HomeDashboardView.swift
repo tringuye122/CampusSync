@@ -2,26 +2,21 @@
 //  HomeDashboardView.swift
 //  CampusSync
 //
-//  Placeholder layout. Phase 3 fills the live status banner (current or next
-//  class plus the gap summary); Phase 4 fills the invites carousel.
+//  Live status banner (Phase 3). The invites carousel is still a placeholder
+//  until Phase 4.
 //
 
 import SwiftUI
 
 struct HomeDashboardView: View {
+    @Environment(AppServices.self) private var services
+    @State private var viewModel = HomeViewModel()
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Live Status", systemImage: "clock.fill")
-                            .font(.headline)
-                            .foregroundStyle(Theme.textPrimary)
-                        Text("Your current class or free time will show here.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .cardStyle()
+                    LiveStatusBanner(meetings: viewModel.meetings)
 
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Friend Invites")
@@ -38,10 +33,13 @@ struct HomeDashboardView: View {
             }
             .background(Theme.screenBackground)
             .navigationTitle("Home")
+            .onAppear { Task { await viewModel.load(schedule: services.schedule) } }
         }
     }
 }
 
 #Preview {
     HomeDashboardView()
+        .environment(AppServices.preview())
+        .environment(AppClock())
 }

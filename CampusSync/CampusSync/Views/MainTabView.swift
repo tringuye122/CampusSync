@@ -38,4 +38,6 @@ struct MainTabView: View {
 
 #Preview {
     MainTabView()
+        .environment(AppServices.preview())
+        .environment(AppClock())
 }
