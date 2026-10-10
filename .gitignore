@@ -67,3 +67,13 @@ fastlane/test_output
 # Real schedule PDFs contain a student name and ID. Never commit them.
 LocalFixtures/
 *.pdf
+
+# Firebase: never commit client config, keys, or emulator output
+GoogleService-Info.plist
+**/GoogleService-Info.plist
+*serviceAccount*.json
+*firebase-adminsdk*.json
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
