@@ -79,13 +79,3 @@ enum FreeSlotCalculator {
         return slots
     }
 }
-
-extension Int {
-    /// Minutes rendered as "45 min", "1h 30m" or "3h".
-    var durationString: String {
-        if self < 60 { return "\(self) min" }
-        let hours = self / 60
-        let minutes = self % 60
-        return minutes == 0 ? "\(hours)h" : "\(hours)h \(minutes)m"
-    }
-}

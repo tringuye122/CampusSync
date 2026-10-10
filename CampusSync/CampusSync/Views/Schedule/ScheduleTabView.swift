@@ -59,7 +59,7 @@ struct ScheduleTabView: View {
                 Text("Load the demo schedule to see how the timetable looks.")
             } actions: {
                 Button("Load demo schedule") {
-                    Task { await viewModel.loadDemoSchedule(using: services.schedule) }
+                    Task { await viewModel.loadDemoSchedule(using: services) }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.carolinaBlue)

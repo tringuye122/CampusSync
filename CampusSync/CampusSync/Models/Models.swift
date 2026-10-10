@@ -396,15 +396,3 @@ enum AppSchema {
         OpenInvite.self, Club.self, ClubEvent.self,
     ]
 }
-
-// MARK: - Time formatting
-
-extension Int {
-    /// Minutes after midnight rendered as "1:25 PM".
-    var clockString: String {
-        let hour24 = (self / 60) % 24
-        let minute = self % 60
-        let hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12
-        return String(format: "%d:%02d %@", hour12, minute, hour24 < 12 ? "AM" : "PM")
-    }
-}

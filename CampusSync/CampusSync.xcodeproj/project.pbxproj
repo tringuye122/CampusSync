@@ -76,8 +76,17 @@
 				Support/AppGroupManager.swift,
 				Support/ScheduleStatus.swift,
 				Support/Theme.swift,
+				Support/TimeFormatting.swift,
+				Support/WidgetTimelineBuilder.swift,
 			);
 			target = F43529E7307A8FF300E76BB5 /* ScheduleWidgetExtension */;
+		};
+		F4352AE3307A9F5700E76BB5 /* Exceptions for "CampusSync" folder in "CampusSync" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F43529A6307A8A8D00E76BB5 /* CampusSync */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -85,6 +94,7 @@
 		F43529A9307A8A8D00E76BB5 /* CampusSync */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				F4352AE3307A9F5700E76BB5 /* Exceptions for "CampusSync" folder in "CampusSync" target */,
 				F4352A18307A922500E76BB5 /* Exceptions for "CampusSync" folder in "ScheduleWidgetExtension" target */,
 			);
 			path = CampusSync;
@@ -533,6 +543,7 @@
 				DEVELOPMENT_TEAM = 4CAQ6LNVVY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CampusSync/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -566,6 +577,7 @@
 				DEVELOPMENT_TEAM = 4CAQ6LNVVY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CampusSync/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

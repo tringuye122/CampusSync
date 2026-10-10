@@ -45,6 +45,7 @@ final class InvitesViewModel {
     func toggleRSVP(_ invite: OpenInvite, services: AppServices) async {
         do {
             try await services.invites.toggleRSVP(inviteID: invite.id)
+            await services.syncWidget()
         } catch RepositoryError.inviteFull {
             errorMessage = "That plan is full."
         } catch {
@@ -59,6 +60,7 @@ final class InvitesViewModel {
         do {
             try await services.invites.post(draft.makeInvite(hostID: user.id, hostName: user.displayName))
             await load(services: services, now: now)
+            await services.syncWidget()
             return true
         } catch {
             errorMessage = "Couldn't post your invite."

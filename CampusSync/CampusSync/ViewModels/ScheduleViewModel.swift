@@ -38,10 +38,11 @@ final class ScheduleViewModel {
         }
     }
 
-    func loadDemoSchedule(using repository: ScheduleRepository) async {
+    func loadDemoSchedule(using services: AppServices) async {
         do {
-            try await repository.loadDemoSchedule()
-            await load(from: repository)
+            try await services.schedule.loadDemoSchedule()
+            await load(from: services.schedule)
+            await services.syncWidget()
         } catch {
             errorMessage = "Couldn't load the demo schedule."
         }

@@ -39,5 +39,6 @@ final class HomeViewModel {
 
     func toggleRSVP(_ invite: OpenInvite, services: AppServices) async {
         try? await services.invites.toggleRSVP(inviteID: invite.id)
+        await services.syncWidget()
     }
 }

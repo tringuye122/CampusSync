@@ -13,10 +13,11 @@ enum AppTab: String, Hashable, CaseIterable {
 }
 
 struct MainTabView: View {
-    @State private var selection: AppTab = .home
+    @Environment(AppRouter.self) private var router
 
     var body: some View {
-        TabView(selection: $selection) {
+        @Bindable var router = router
+        TabView(selection: $router.selectedTab) {
             HomeDashboardView()
                 .tabItem { Label("Home", systemImage: "house.fill") }
                 .tag(AppTab.home)
@@ -40,4 +41,5 @@ struct MainTabView: View {
     MainTabView()
         .environment(AppServices.preview())
         .environment(AppClock())
+        .environment(AppRouter())
 }
