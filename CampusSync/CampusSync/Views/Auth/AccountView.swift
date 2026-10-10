@@ -12,6 +12,8 @@ struct AccountView: View {
     @Environment(AppServices.self) private var services
     @Environment(\.dismiss) private var dismiss
     @State private var sharesSchedule = true
+    @State private var major = ""
+    @State private var classYear = ""
 
     var body: some View {
         NavigationStack {
@@ -24,6 +26,22 @@ struct AccountView: View {
                     } footer: {
                         Text("Friends find you by your handle. Your email is never shown to other students.")
                     }
+                }
+                Section {
+                    TextField("Major (for example CS)", text: $major)
+                        .minTapTarget()
+                    TextField("Class year (for example 2028)", text: $classYear)
+                        .keyboardType(.numberPad)
+                        .minTapTarget()
+                    Button("Save") {
+                        Task { await auth.updateDetails(major: major, classYear: classYear) }
+                    }
+                    .disabled(auth.isBusy)
+                    .minTapTarget()
+                } header: {
+                    Text("Profile")
+                } footer: {
+                    Text("Shown in your header, like CS '28. Friends can see them. Both are optional.")
                 }
                 Section {
                     NavigationLink {
@@ -41,6 +59,7 @@ struct AccountView: View {
                             // Publishes the meeting times, or removes them all when switched off.
                             Task { try? await services.schedule.setSharesScheduleWithFriends(shares) }
                         }))
+                    .tint(Theme.success)
                         .minTapTarget()
                         .onAppear { sharesSchedule = services.schedule.sharesScheduleWithFriends }
                 } footer: {
@@ -56,6 +75,10 @@ struct AccountView: View {
             }
             .scrollContentBackground(.hidden)
             .background(Theme.screenBackground)
+            .onAppear {
+                major = auth.account?.major ?? ""
+                classYear = auth.account?.classYear.map(String.init) ?? ""
+            }
             .navigationTitle("Account")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

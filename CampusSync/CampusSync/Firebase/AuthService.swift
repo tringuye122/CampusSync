@@ -71,7 +71,8 @@ final class AuthService {
         do {
             if let profile = try await backend.fetchProfile(uid: user.uid) {
                 let account = UserAccount(
-                    uid: user.uid, email: user.email, displayName: profile.displayName, handle: profile.handle)
+                    uid: user.uid, email: user.email, displayName: profile.displayName, handle: profile.handle,
+                    major: profile.major, classYear: profile.classYear)
                 saveCachedAccount(account)
                 state = .signedIn(account)
             } else {
@@ -162,7 +163,19 @@ final class AuthService {
         }
     }
 
-    func createProfile(displayName: String, handle: String) async {
+    /// Saves the optional major and class year, then refreshes so the header updates.
+    func updateDetails(major: String, classYear: String) async {
+        guard let user = backend.currentUser() else { return }
+        await perform {
+            try await self.backend.updateProfileDetails(
+                uid: user.uid,
+                major: ProfileDetails.normalizedMajor(major),
+                classYear: ProfileDetails.parsedClassYear(classYear))
+            await self.refresh()
+        }
+    }
+
+    func createProfile(displayName: String, handle: String, major: String = "", classYear: String = "") async {
         if let issue = AuthValidator.displayNameIssue(displayName) ?? AuthValidator.handleIssue(handle) {
             errorMessage = issue.message
             return
@@ -175,6 +188,11 @@ final class AuthService {
             try await self.backend.createProfile(
                 uid: user.uid, displayName: AuthValidator.normalizedName(displayName),
                 handle: AuthValidator.normalizeHandle(handle))
+            // Optional details; a failure here must not undo the sign-up, so it is best-effort.
+            let details = (ProfileDetails.normalizedMajor(major), ProfileDetails.parsedClassYear(classYear))
+            if details.0 != nil || details.1 != nil {
+                try? await self.backend.updateProfileDetails(uid: user.uid, major: details.0, classYear: details.1)
+            }
             await self.refresh()
         }
     }

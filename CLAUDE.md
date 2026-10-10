@@ -37,7 +37,7 @@ The full spec is in `docs/CampusSync_Spec_Doc.md` and has been updated for the F
 - `OpenInvite` needs `recipientIDs` (who was invited) and the user needs a `friendIDs` list. The friend graph comes from Firestore (friend requests and accepted friendships); seed data is used only for previews and tests.
 - **Club events are public.** Users who subscribe or join a club are notified.
 - The first-listed instructor on a class is the professor shown in the rating sheet (rating fetched from RateMyProfessors). Label the field "Instructor".
-- Free slots: minimum gap 30 minutes, waking hours 8 AM to 10 PM, a configurable walking buffer between buildings. Confirm these values with the team before building the overlap view.
+- Free slots: minimum gap 30 minutes, waking hours 8 AM to 10 PM, a configurable walking buffer between buildings (default 10 minutes). Confirmed by the user on 2026-10-10 (the buffer default was kept, not discussed). Friend overlap compares one friend at a time; "Make an invite for this slot" starts at the slot's next start and defaults to 60 minutes (or the longest option that fits).
 
 ## Schedule import
 
@@ -56,7 +56,8 @@ ConnectCarolina class-schedule PDF is the primary import. `.ics` is a stretch im
 - Carolina Blue `#7BAFD4` (fills, buttons, selected tab). Navy `#13294B` for text and dark surfaces. Use asset-catalog colors so dark mode works.
 - Cards: 20 pt corner radius, 16 pt padding, minimum 44 pt tap targets. Shared `CardStyle` modifier in `Theme.swift`.
 - Category pills (Food, Study, Fitness, Social) always pair color with an SF Symbol. Support Dynamic Type and add VoiceOver labels to timetable blocks.
-- Four tabs: Home, Schedule (My Schedule / Friend Overlap), Friend Invites, Clubs.
+- Four tabs: Home, Schedule (Timetable / Friends / Classes), Invites, Clubs. Every tab sits under one profile header (avatar, @handle, UNC logo, Verified Member pill, "CS '28 · Free Tue/Thu 12:15–3:30"); the avatar opens Account and Friends.
+- Screens follow the six PDF designs the user supplied (Home unified scroll, Schedule, Friend Overlap, Classes with inline ratings, Invites, Clubs). Status colors (Success, Caution, Danger and surfaces) are asset-catalog tokens in `Theme.swift`. Day timelines cover 8 AM to 10 PM, scroll, and open at about 9 AM.
 
 ## Project layout
 
@@ -78,19 +79,25 @@ docs/CampusSync_Spec_Doc.md   master spec
 
 Work one phase at a time and stop for review after each.
 
-0. Setup: targets, App Group, entitlements, `AppGroupManager`
-1. Foundation: `Models.swift`, `Theme.swift`, `AppClock`, `SampleData.swift`, repository protocols
-2. Shell: `MainTabView`, `HomeDashboardView` with placeholder screens
-3. Schedule: timetable grid, free-slot calculation, `ProfessorRatingSheet`
-4. Friend Invites: feed, `OpenInviteCardView`, compose sheet, RSVP, expiry
-5. Widget: snapshot writer, `TimelineProvider`, all families
-6. PDF import: parser, review screen, demo fallback, RateMyProfessors ratings
-7. Firebase foundation: Firebase project and SDK, Auth sign up and sign in (`@unc.edu`, email verification), user profile and handles, security rules with emulator tests
-8. Sync and friends: friend search, request and accept; Firestore repositories for schedule, invites and clubs; listeners feeding the snapshot writer; seeding script for clubs and demo data
-9. Friend overlap: `OverlapEngine`, `FriendScheduleOverlayView` over real friends' shared schedules
-10. Clubs: feed over Firestore, access badges, Join and Pay Dues memberships
+Status as of 2026-10-10: phases 0 to 10b are committed and pushed; the user signed off the UI after review on two physical phones. Next is undecided (the user is leaning toward a widget redesign). Mark a phase done only after the user signs off.
+
+0. Setup: targets, App Group, entitlements, `AppGroupManager` (done)
+1. Foundation: `Models.swift`, `Theme.swift`, `AppClock`, `SampleData.swift`, repository protocols (done)
+2. Shell: `MainTabView`, `HomeDashboardView` with placeholder screens (done)
+3. Schedule: timetable grid, free-slot calculation, `ProfessorRatingSheet` (done)
+4. Friend Invites: feed, `OpenInviteCardView`, compose sheet, RSVP, expiry (done)
+5. Widget: snapshot writer, `TimelineProvider`, all families (done; the user said not to touch the widget for now, and it has no new design yet)
+6. PDF import: parser, review screen, demo fallback, RateMyProfessors ratings (done)
+7. Firebase foundation: Firebase project and SDK, Auth sign up and sign in (`@unc.edu`, email verification), user profile and handles, security rules with emulator tests (done)
+8. Sync and friends: friend search, request and accept; Firestore repositories for schedule, invites and clubs; listeners feeding the snapshot writer; seeding script for clubs and demo data (done and pushed)
+9. Friend overlap: `OverlapEngine`, `FriendScheduleOverlayView` over real friends' shared schedules (done; shown as Schedule > Friends)
+10. UI redesign to the supplied PDF designs: shared header, Home, Schedule (Timetable / Friends / Classes with inline ratings), Invites, and the Clubs feed (access badges, schedule conflicts, Join and Pay Dues). Absorbs the old "Clubs" phase. (done; rules for major and class year deployed)
+10b. Design perfecting (done, signed off 2026-10-10): fixed the UI issues found on the phones against the six PDF designs (contrast, Home friend cards for all friends with a status, Classes layout, dotted free blocks, green toggles).
+10c. Clubs live (deferred by the user): seed the real project's clubs and events (`firebase/seed/seed.mjs --real`, needs admin credentials and the user's go-ahead) and verify Join and Pay Dues on device.
 11. Polish: dark mode, empty states, dev menu (time override, reset demo data), demo recording
 12. Stretch: `.ics` import, push notifications (FCM), report and block, App Check
+
+Known follow-ups (not scheduled): invite recipients being friends is enforced by the app only, since rules cannot loop over `recipientIDs` (a per-recipient inbox design would fix it); invite listeners are unbounded until an `expiresAt` composite index is added and deployed; a widget redesign has no design yet; a custom sender domain if the verification email stays slow.
 
 Cut order if time runs short: Clubs polish, overlap polish, PDF import (use the demo schedule), widget families beyond small and medium. Never cut the widget, Friend Invites, or real accounts and sync.
 

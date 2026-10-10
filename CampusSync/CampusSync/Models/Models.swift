@@ -363,6 +363,8 @@ final class ClubEvent {
     var details: String
     var location: String
     var startTime: Date
+    /// Additive in the Clubs redesign (cards show "7:00–8:00 PM"). Defaults to an hour after the start.
+    var endTime: Date
     var access: ClubAccess
     /// Whole dollars.
     var duesAmount: Int
@@ -375,6 +377,7 @@ final class ClubEvent {
         details: String,
         location: String,
         startTime: Date,
+        endTime: Date? = nil,
         access: ClubAccess,
         duesAmount: Int = 0
     ) {
@@ -385,6 +388,7 @@ final class ClubEvent {
         self.details = details
         self.location = location
         self.startTime = startTime
+        self.endTime = endTime ?? startTime.addingTimeInterval(3600)
         self.access = access
         self.duesAmount = duesAmount
     }

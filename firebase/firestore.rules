@@ -22,6 +22,13 @@ service cloud.firestore {
       return h is string && h.matches('[a-z0-9_]{3,20}');
     }
 
+    // Optional extras on the public profile, shown in the app header ("CS '28").
+    // Either may be absent; if present they must be well formed.
+    function validProfileDetails(d) {
+      return (!('major' in d) || (d.major is string && d.major.size() >= 1 && d.major.size() <= 30))
+        && (!('classYear' in d) || (d.classYear is int && d.classYear >= 2000 && d.classYear <= 2100));
+    }
+
     function validDisplayName(n) {
       return n is string && n.size() >= 2 && n.size() <= 40;
     }
@@ -34,16 +41,18 @@ service cloud.firestore {
       // Created together with the handle claim in one batch, and only for yourself.
       allow create: if isVerifiedStudent()
         && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['displayName', 'handle', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['displayName', 'handle', 'createdAt', 'major', 'classYear'])
+        && validProfileDetails(request.resource.data)
         && validDisplayName(request.resource.data.displayName)
         && validHandle(request.resource.data.handle)
         && request.resource.data.createdAt == request.time
         && getAfter(/databases/$(database)/documents/handles/$(request.resource.data.handle)).data.uid == uid;
 
-      // The name can change. The handle and creation time cannot.
+      // The name, major and class year can change. The handle and creation time cannot.
       allow update: if isVerifiedStudent()
         && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['displayName', 'handle', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['displayName', 'handle', 'createdAt', 'major', 'classYear'])
+        && validProfileDetails(request.resource.data)
         && validDisplayName(request.resource.data.displayName)
         && request.resource.data.handle == resource.data.handle
         && request.resource.data.createdAt == resource.data.createdAt;

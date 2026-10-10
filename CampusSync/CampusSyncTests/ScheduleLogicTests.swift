@@ -120,10 +120,13 @@ struct ScheduleLogicTests {
         let now = date(13, 12, 30)
         let status = ScheduleStatusEngine.status(at: now, meetings: snapshotMeetings)
         let content = LiveStatusBanner.content(for: status, now: now)
-        #expect(content.title == "3h free before COMP 577")
+        #expect(content.label == "FREE NOW")
+        #expect(content.headline == "3 h")
+        #expect(content.detail.hasPrefix("Next: COMP 577 at 3:30 PM"))
         let early = date(13, 10, 15)
         let beforeClass = LiveStatusBanner.content(
             for: ScheduleStatusEngine.status(at: early, meetings: snapshotMeetings), now: early)
-        #expect(beforeClass.title == "45 min free before COMP 433")
+        #expect(beforeClass.headline == "45 min")
+        #expect(beforeClass.detail.hasPrefix("Next: COMP 433 at 11:00 AM"))
     }
 }

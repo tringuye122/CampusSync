@@ -68,10 +68,10 @@ enum InviteTiming {
         calendar: Calendar = .current
     ) -> String {
         if start <= now {
-            return "Happening now · ends in \(minutes(from: now, to: expiresAt).durationString)"
+            return "Happening now · ends in \(minutes(from: now, to: expiresAt).spacedDuration)"
         }
         if calendar.isDate(start, inSameDayAs: now) {
-            return "Starts in \(minutes(from: now, to: start).durationString)"
+            return "Starts in \(minutes(from: now, to: start).spacedDuration)"
         }
         return "Starts \(start.formatted(.dateTime.weekday(.abbreviated).hour().minute()))"
     }

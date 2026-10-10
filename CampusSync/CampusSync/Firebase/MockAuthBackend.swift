@@ -103,6 +103,12 @@ final class MockAuthBackend: AuthBackend {
         return handles[handle] == nil
     }
 
+    func updateProfileDetails(uid: String, major: String?, classYear: Int?) async throws {
+        try requireOnline()
+        profiles[uid]?.major = major
+        profiles[uid]?.classYear = classYear
+    }
+
     func createProfile(uid: String, displayName: String, handle: String) async throws {
         try requireOnline()
         guard handles[handle] == nil else { throw AuthError.handleTaken }

@@ -121,6 +121,7 @@ struct ImportClassEditSheet: View {
                 Section("When") {
                     ForEach(Weekday.allCases) { day in
                         Toggle(day.fullName, isOn: dayBinding(day))
+                            .tint(Theme.success)
                     }
                     DatePicker("Starts", selection: timeBinding(\.startMinutes), displayedComponents: .hourAndMinute)
                     DatePicker("Ends", selection: timeBinding(\.endMinutes), displayedComponents: .hourAndMinute)

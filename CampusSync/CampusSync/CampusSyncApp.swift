@@ -42,14 +42,17 @@ struct CampusSyncApp: App {
     }
 
     /// The SwiftData store is only a cache. Bump this name whenever the schema changes in a
-    /// way SwiftData cannot migrate (v2: UUID -> String ids). The old file is never opened,
+    /// way SwiftData cannot migrate (v2: UUID -> String ids, v3: ClubEvent.endTime). The old file is never opened,
     /// so there is nothing to migrate; seeding and Firestore refill the new cache.
-    private static let storeName = "CampusSyncCache-v2"
+    private static let storeName = "CampusSyncCache-v3"
 
     private static func makeContainer() -> ModelContainer {
         let schema = Schema(AppSchema.models)
         let configuration = ModelConfiguration(storeName, schema: schema)
-        removeStoreFiles(named: "default", besides: configuration.url)   // the pre-v2 store
+        // Earlier cache files are never opened again; remove them.
+        for legacy in ["default", "CampusSyncCache-v2"] {
+            removeStoreFiles(named: legacy, besides: configuration.url)
+        }
 
         if let container = try? ModelContainer(for: schema, configurations: configuration) {
             return container

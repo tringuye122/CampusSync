@@ -213,15 +213,22 @@ final class SyncCoordinator {
         let ids = friendIDs
 
         // One task per friend, so a long friend list costs one round trip's time, not 2N.
-        var fetched: [String: (name: String, meetings: [ClassMeeting])] = [:]
-        await withTaskGroup(of: (String, String, [ClassMeeting])?.self) { group in
+        // `meetings` is nil when only the schedule fetch failed: the friend still shows up (by name),
+        // and any cached meetings are kept rather than wiped by a transient error.
+        var fetched: [String: (name: String, meetings: [ClassMeeting]?)] = [:]
+        await withTaskGroup(of: (String, String, [ClassMeeting]?)?.self) { group in
             for id in ids {
                 group.addTask { @MainActor [db] in
                     do {
                         let profile = try await db.collection("users").document(id).getDocument()
                         guard let name = profile.data()?["displayName"] as? String else { return nil }
-                        let docs = try await db.collection("schedules").document(id).collection("meetings").getDocuments()
-                        return (id, name, docs.documents.compactMap { FirestoreCoding.meeting(data: $0.data()) })
+                        do {
+                            let docs = try await db.collection("schedules").document(id).collection("meetings").getDocuments()
+                            return (id, name, docs.documents.compactMap { FirestoreCoding.meeting(data: $0.data()) })
+                        } catch {
+                            print("Could not load schedule of friend \(id): \(error.localizedDescription)")
+                            return (id, name, nil)
+                        }
                     } catch {
                         print("Could not load friend \(id): \(error.localizedDescription)")
                         return nil
@@ -240,9 +247,9 @@ final class SyncCoordinator {
             guard let info = fetched[id] else { continue }
             if let current = existing[id] {
                 current.displayName = info.name
-                current.classes = info.meetings
+                if let meetings = info.meetings { current.classes = meetings }
             } else {
-                context.insert(FriendProfile(id: id, displayName: info.name, classes: info.meetings))
+                context.insert(FriendProfile(id: id, displayName: info.name, classes: info.meetings ?? []))
             }
         }
         for (id, friend) in existing where !ids.contains(id) { context.delete(friend) }
@@ -309,6 +316,7 @@ final class SyncCoordinator {
                 current.details = fresh.details
                 current.location = fresh.location
                 current.startTime = fresh.startTime
+                current.endTime = fresh.endTime
                 current.access = fresh.access
                 current.duesAmount = fresh.duesAmount
             } else {

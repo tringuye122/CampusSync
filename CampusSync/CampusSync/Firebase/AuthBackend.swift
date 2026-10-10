@@ -25,4 +25,6 @@ protocol AuthBackend {
     func isHandleAvailable(_ handle: String) async throws -> Bool
     /// Claims the handle and creates the profile together. Throws `AuthError.handleTaken`.
     func createProfile(uid: String, displayName: String, handle: String) async throws
+    /// Sets or clears the optional major and class year (nil removes the field).
+    func updateProfileDetails(uid: String, major: String?, classYear: Int?) async throws
 }

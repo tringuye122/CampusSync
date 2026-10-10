@@ -19,7 +19,7 @@ struct MainTabView: View {
         @Bindable var router = router
         TabView(selection: $router.selectedTab) {
             HomeDashboardView()
-                .tabItem { Label("Home", systemImage: "house.fill") }
+                .tabItem { Label("Home", systemImage: "house") }
                 .tag(AppTab.home)
 
             ScheduleTabView()
@@ -27,13 +27,16 @@ struct MainTabView: View {
                 .tag(AppTab.schedule)
 
             InvitesTabView()
-                .tabItem { Label("Invites", systemImage: "paperplane.fill") }
+                .tabItem { Label("Invites", systemImage: "person.badge.plus") }
                 .tag(AppTab.invites)
 
             ClubsTabView()
-                .tabItem { Label("Clubs", systemImage: "person.3.fill") }
+                .tabItem { Label("Clubs", systemImage: "star.circle") }
                 .tag(AppTab.clubs)
         }
+        // Selected icon and label use the primary text color (navy in light, near-white in dark;
+        // a fixed navy vanished against the dark tab bar). The system fills the selected symbol.
+        .tint(Theme.textPrimary)
     }
 }
 

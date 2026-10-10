@@ -25,4 +25,12 @@ nonisolated extension Int {
         let minutes = self % 60
         return minutes == 0 ? "\(hours)h" : "\(hours)h \(minutes)m"
     }
+
+    /// Minutes as the designs write them: "45 min", "3 h", "3 h 15 min".
+    var spacedDuration: String {
+        if self < 60 { return "\(self) min" }
+        let hours = self / 60
+        let minutes = self % 60
+        return minutes == 0 ? "\(hours) h" : "\(hours) h \(minutes) min"
+    }
 }

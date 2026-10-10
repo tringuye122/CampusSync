@@ -16,6 +16,8 @@ final class ScheduleViewModel {
     private(set) var errorMessage: String?
     /// Set when a class block is tapped; presents the professor rating sheet.
     var selectedClass: ClassSchedule?
+    /// RateMyProfessors results by first-listed instructor, filled by `loadRatings`.
+    private(set) var ratings: [String: ProfessorRatingLookup] = [:]
 
     let settings: FreeSlotSettings
 
@@ -36,6 +38,23 @@ final class ScheduleViewModel {
         } catch {
             errorMessage = "Couldn't load your schedule."
         }
+    }
+
+    /// Looks up every first-listed instructor, a few at a time. Results are cached on disk by the
+    /// repository, so this is cheap after the first run and still works offline.
+    func loadRatings(from repository: ScheduleRepository) async {
+        let names = Set(classes.compactMap(\.primaryInstructor))
+        await withTaskGroup(of: (String, ProfessorRatingLookup).self) { group in
+            for name in names where ratings[name] == nil {
+                group.addTask { @MainActor in (name, await repository.professorRating(for: name)) }
+            }
+            for await (name, lookup) in group { ratings[name] = lookup }
+        }
+    }
+
+    /// nil while the lookup has not finished.
+    func rating(for cls: ClassSchedule) -> ProfessorRatingLookup? {
+        cls.primaryInstructor.flatMap { ratings[$0] }
     }
 
     func loadDemoSchedule(using services: AppServices) async {

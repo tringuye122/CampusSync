@@ -89,7 +89,21 @@ final class FirebaseAuthBackend: AuthBackend {
                   let name = data["displayName"] as? String,
                   let handle = data["handle"] as? String
             else { return nil }
-            return ProfileData(displayName: name, handle: handle)
+            return ProfileData(
+                displayName: name, handle: handle,
+                major: data["major"] as? String, classYear: data["classYear"] as? Int)
+        } catch {
+            throw Self.map(error)
+        }
+    }
+
+    func updateProfileDetails(uid: String, major: String?, classYear: Int?) async throws {
+        do {
+            // nil removes the field, which the rules allow (the keys must stay within the allowed set).
+            try await db.collection("users").document(uid).updateData([
+                "major": major.map { $0 as Any } ?? FieldValue.delete(),
+                "classYear": classYear.map { $0 as Any } ?? FieldValue.delete(),
+            ])
         } catch {
             throw Self.map(error)
         }

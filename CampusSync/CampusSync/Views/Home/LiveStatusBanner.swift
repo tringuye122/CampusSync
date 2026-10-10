@@ -2,9 +2,9 @@
 //  LiveStatusBanner.swift
 //  CampusSync
 //
-//  Current or next class with a countdown, plus a gap summary. "Now" always
-//  comes from AppClock, so the demo time override works. TimelineView only
-//  triggers the per-minute refresh.
+//  The blue "FREE NOW" hero card at the top of Home: free time until the next class, or the
+//  class you are in. "Now" always comes from AppClock, so the demo time override works.
+//  TimelineView only triggers the per-minute refresh.
 //
 
 import SwiftUI
@@ -16,76 +16,85 @@ struct LiveStatusBanner: View {
     var body: some View {
         TimelineView(.everyMinute) { _ in
             let now = clock.now
+            let weekday = Calendar.current.component(.weekday, from: now)
             let content = Self.content(
                 for: ScheduleStatusEngine.status(at: now, meetings: meetings),
-                now: now
+                now: now,
+                hasClassesToday: meetings.contains { $0.weekday == weekday }
             )
-            VStack(alignment: .leading, spacing: 6) {
-                Label(content.title, systemImage: content.symbol)
-                    .font(.headline)
-                    .foregroundStyle(Theme.textPrimary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(content.label)
+                    .font(.subheadline.weight(.heavy))
+                    .tracking(1)
+                    .foregroundStyle(Theme.navy)
+                Text(content.headline)
+                    .font(.system(size: 40, weight: .heavy, design: .rounded))
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                    .foregroundStyle(Theme.navy)
                 Text(content.detail)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                if let gap = content.gap {
-                    Text(gap)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Theme.textPrimary)
+                    .font(.headline)
+                    .foregroundStyle(Theme.navy)
+                if let extra = content.extra {
+                    Text(extra)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.navy)
                 }
             }
-            .cardStyle()
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Carolina Blue in both appearances; Navy text on it is readable in light and dark mode.
+            .background(Theme.carolinaBlue, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .accessibilityElement(children: .combine)
         }
     }
 
     struct Content: Equatable {
-        var title: String
+        /// Small caps line: "FREE NOW", "IN CLASS".
+        var label: String
+        /// The big line: a countdown ("3 h 15 min") or the class code.
+        var headline: String
         var detail: String
-        var gap: String?
-        var symbol: String
+        var extra: String?
     }
 
-    static func content(for status: ScheduleStatus, now: Date) -> Content {
+    static func content(for status: ScheduleStatus, now: Date, hasClassesToday: Bool = true) -> Content {
         switch status {
         case let .inClass(meeting, endsAt, nextToday):
-            var gap: String?
+            var extra: String?
             if let next = nextToday {
                 let free = next.startMinutes - meeting.endMinutes
-                gap = free > 0
-                    ? "\(free.durationString) free before \(next.courseCode) at \(next.startMinutes.clockString)"
+                extra = free > 0
+                    ? "Then \(free.spacedDuration) free before \(next.courseCode) at \(next.startMinutes.clockString)"
                     : "\(next.courseCode) starts right after at \(next.startMinutes.clockString)"
             }
             return Content(
-                title: "In class: \(meeting.courseCode)",
-                detail: "Ends in \(minutes(from: now, to: endsAt).durationString) · \(meeting.location)",
-                gap: gap,
-                symbol: "book.closed.fill"
-            )
+                label: "IN CLASS",
+                headline: meeting.courseCode,
+                detail: "Ends in \(minutes(from: now, to: endsAt).spacedDuration) · \(meeting.location)",
+                extra: extra)
 
         case let .freeBeforeNext(next, startsAt):
             return Content(
-                title: "\(minutes(from: now, to: startsAt).durationString) free before \(next.courseCode)",
-                detail: "Starts at \(next.startMinutes.clockString) · \(next.location)",
-                gap: nil,
-                symbol: "clock.fill"
-            )
+                label: "FREE NOW",
+                headline: minutes(from: now, to: startsAt).spacedDuration,
+                detail: "Next: \(next.courseCode) at \(next.startMinutes.clockString) · \(next.location)",
+                extra: nil)
 
         case let .nextClass(next, _):
             let day = Weekday(rawValue: next.weekday)?.shortLabel ?? ""
             return Content(
-                title: "No more classes right now",
-                detail: "Next: \(next.courseCode), \(day) \(next.startMinutes.clockString)",
-                gap: nil,
-                symbol: "moon.stars.fill"
-            )
+                label: hasClassesToday ? "DONE FOR TODAY" : "NO CLASSES TODAY",
+                headline: hasClassesToday ? "Free the rest of the day" : "Free all day",
+                detail: "Next: \(next.courseCode), \(day) \(next.startMinutes.clockString) · \(next.location)",
+                extra: nil)
 
         case .noClasses:
             return Content(
-                title: "No classes loaded",
-                detail: "Load the demo schedule from the Schedule tab.",
-                gap: nil,
-                symbol: "calendar.badge.plus"
-            )
+                label: "NO CLASSES YET",
+                headline: "Add your schedule",
+                detail: "Import your ConnectCarolina PDF or load the demo schedule in the Schedule tab.",
+                extra: nil)
         }
     }
 

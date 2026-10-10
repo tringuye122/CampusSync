@@ -23,6 +23,22 @@ enum Theme {
     static let categoryFitness = Color("CategoryFitness")
     static let categorySocial = Color("CategorySocial")
 
+    // Status colors from the designs: rating pills, "free then" and "conflicts" bars.
+    static let success = Color("Success")
+    static let caution = Color("Caution")
+    static let cautionSurface = Color("CautionSurface")
+    static let cautionText = Color("CautionText")
+    static let danger = Color("Danger")
+    static let dangerSurface = Color("DangerSurface")
+    /// Rating pill fills. Same in light and dark and dark enough that white text always reads
+    /// (the Success/Caution/Danger tokens turn light in dark mode, which washes white text out).
+    static let ratingGood = Color("RatingGood")
+    static let ratingFair = Color("RatingFair")
+    static let ratingPoor = Color("RatingPoor")
+    /// Soft tinted fill for small pills (Verified Member, category tags) and inactive chips.
+    static let pillBackground = Color("PillBackground")
+    static let hairline = Color("Hairline")
+
     static let cardRadius: CGFloat = 20
     static let cardPadding: CGFloat = 16
     static let minTapTarget: CGFloat = 44

@@ -92,6 +92,7 @@ enum FirestoreCoding {
             id: id, clubID: clubID, clubName: clubName, title: title,
             details: data["details"] as? String ?? "", location: data["location"] as? String ?? "",
             startTime: start,
+            endTime: (data["endTime"] as? Timestamp)?.dateValue(),   // nil: an hour after the start
             access: (data["access"] as? String).flatMap(ClubAccess.init(rawValue:)) ?? .public,
             duesAmount: data["duesAmount"] as? Int ?? 0)
     }

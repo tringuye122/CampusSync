@@ -29,6 +29,13 @@ final class InvitesViewModel {
         }
     }
 
+    /// Unexpired invites matching the chip, soonest first (the Invites tab shows one flat list).
+    func filteredInvites(at now: Date, filter: InviteFilter) -> [OpenInvite] {
+        invites
+            .filter { !$0.isExpired(at: now) && filter.includes($0) }
+            .sorted { $0.startTime < $1.startTime }
+    }
+
     func sections(at now: Date) -> [InviteSection] {
         InviteTiming.sections(for: invites, now: now)
     }

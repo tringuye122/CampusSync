@@ -162,22 +162,23 @@ enum SampleData {
 
     static func events(now: Date) -> [ClubEvent] {
         func hours(_ h: Int) -> Date { now.addingTimeInterval(TimeInterval(h * 3600)) }
+        // `hours(n) + 1800` below means n hours and 30 minutes.
         return [
             ClubEvent(clubID: filmClubID, clubName: "Night Reel Film Club",
                       title: "Friday night screening", details: "A surprise classic. Popcorn provided.",
-                      location: "Student Union Auditorium", startTime: hours(5), access: .public),
+                      location: "Student Union Auditorium", startTime: hours(5), endTime: hours(7), access: .public),
             ClubEvent(clubID: robotsClubID, clubName: "Blue Ridge Robotics",
                       title: "Build night GBM", details: "Kickoff for the spring bot. Bring a laptop.",
-                      location: "Sitterson Hall", startTime: hours(8), access: .duesRequired, duesAmount: 25),
+                      location: "Sitterson Hall", startTime: hours(8), endTime: hours(9) + 1800, access: .duesRequired, duesAmount: 25),
             ClubEvent(clubID: debateClubID, clubName: "Lantern Debate Society",
                       title: "Practice rounds", details: "Members-only scrimmage, two topics.",
-                      location: "Dey Hall", startTime: hours(22), access: .membersOnly),
+                      location: "Dey Hall", startTime: hours(22), endTime: hours(23), access: .membersOnly),
             ClubEvent(clubID: chessClubID, clubName: "Quad Chess Union",
                       title: "Open play and ladder", details: "All levels. Boards provided.",
-                      location: "The Pit", startTime: hours(27), access: .public),
+                      location: "The Pit", startTime: hours(27), endTime: hours(28) + 1800, access: .public),
             ClubEvent(clubID: culinaryClubID, clubName: "Tidewater Culinary Circle",
                       title: "Pasta night", details: "Cook together, then eat together.",
-                      location: "Student Union Kitchen", startTime: hours(50), access: .duesRequired, duesAmount: 15),
+                      location: "Student Union Kitchen", startTime: hours(50), endTime: hours(52), access: .duesRequired, duesAmount: 15),
         ]
     }
 

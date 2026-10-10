@@ -2,169 +2,87 @@
 //  TimetableView.swift
 //  CampusSync
 //
-//  Weekly grid, Monday to Friday, covering the waking-hours window. Class blocks
-//  are solid Carolina Blue; usable free gaps are shaded with a dashed outline.
-//  Tapping a class opens the professor rating sheet.
+//  One day at a time (Mon to Fri chips live in the parent). Class blocks are solid Carolina Blue;
+//  usable free gaps are dashed boxes labelled "Free · 3 h 15 min". Free gaps already account for
+//  the 30 minute minimum, waking hours, and the walking buffer between buildings.
 //
 
 import SwiftUI
 
 struct TimetableView: View {
     let viewModel: ScheduleViewModel
+    let day: Weekday
     @Environment(AppClock.self) private var clock
 
-    private let hourHeight: CGFloat = 56
-    private let axisWidth: CGFloat = 44
-
-    private var windowStart: Int { viewModel.settings.dayStartMinutes }
-    private var windowEnd: Int { viewModel.settings.dayEndMinutes }
-    private var hourCount: Int { (windowEnd - windowStart) / 60 }
-    private var gridHeight: CGFloat { CGFloat(windowEnd - windowStart) * hourHeight / 60 }
-    private var todayWeekday: Int { Calendar.current.component(.weekday, from: clock.now) }
-
     var body: some View {
-        ScrollView {
-            VStack(spacing: 4) {
-                dayHeader
-                HStack(alignment: .top, spacing: 0) {
-                    timeAxis
-                    ForEach(Weekday.allCases) { day in
-                        dayColumn(day)
-                    }
+        let now = clock.now
+        let isToday = Weekday(rawValue: Calendar.current.component(.weekday, from: now)) == day
+        TimelineGrid(nowMinutes: isToday ? now.minutesSinceMidnight() : nil) { metrics in
+            ZStack(alignment: .topLeading) {
+                ForEach(viewModel.freeSlots(on: day)) { slot in
+                    freeBlock(slot, metrics: metrics)
+                }
+                ForEach(viewModel.classes(on: day)) { cls in
+                    classBlock(cls, metrics: metrics)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
         }
-        .background(Theme.screenBackground)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
 
-    // MARK: Header and axis
-
-    private var dayHeader: some View {
-        HStack(spacing: 0) {
-            Color.clear.frame(width: axisWidth, height: 1)
-            ForEach(Weekday.allCases) { day in
-                let isToday = day.rawValue == todayWeekday
-                Text(day.shortLabel)
-                    .font(.caption.bold())
-                    .foregroundStyle(isToday ? Theme.navy : Theme.textPrimary)
-                    .frame(maxWidth: .infinity, minHeight: 28)
-                    .background(isToday ? Theme.carolinaBlue : .clear, in: Capsule())
-                    .accessibilityLabel(isToday ? "\(day.fullName), today" : day.fullName)
-            }
+    private func classBlock(_ cls: ClassSchedule, metrics: TimelineMetrics) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(cls.courseCode)
+                .font(.headline.weight(.heavy))
+            Text("\(cls.startMinutes.clockString) – \(cls.endMinutes.clockString)")
+                .font(.subheadline)
+            Text(location(of: cls))
+                .font(.subheadline)
         }
+        .foregroundStyle(Theme.navy)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(height: max(36, metrics.height(from: cls.startMinutes, to: cls.endMinutes) - 3), alignment: .top)
+        .background(Theme.carolinaBlue, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipped()
+        .offset(y: metrics.y(cls.startMinutes) + 1)
+        // VoiceOver reads the whole block as one sentence.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "\(cls.courseCode), \(cls.startMinutes.clockString) to \(cls.endMinutes.clockString), \(location(of: cls))")
     }
 
-    private var timeAxis: some View {
-        ZStack(alignment: .topTrailing) {
-            ForEach(0...hourCount, id: \.self) { hour in
-                Text((windowStart + hour * 60).clockString.replacingOccurrences(of: ":00", with: ""))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .minimumScaleFactor(0.7)
-                    .lineLimit(1)
-                    .offset(y: CGFloat(hour) * hourHeight - 7)
-                    .padding(.trailing, 4)
-            }
-        }
-        .frame(width: axisWidth, height: gridHeight, alignment: .topTrailing)
-        .accessibilityHidden(true)
-    }
-
-    // MARK: Day column
-
-    private func dayColumn(_ day: Weekday) -> some View {
-        ZStack(alignment: .topLeading) {
-            ForEach(0...hourCount, id: \.self) { hour in
-                Rectangle()
-                    .fill(Color.secondary.opacity(0.2))
-                    .frame(height: 0.5)
-                    .offset(y: CGFloat(hour) * hourHeight)
-            }
-
-            ForEach(viewModel.freeSlots(on: day)) { slot in
-                freeSlotView(slot, day: day)
-            }
-
-            ForEach(viewModel.classes(on: day)) { item in
-                classBlock(item, day: day)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: gridHeight, alignment: .topLeading)
-    }
-
-    private func yOffset(_ minutes: Int) -> CGFloat {
-        CGFloat(max(minutes, windowStart) - windowStart) * hourHeight / 60
-    }
-
-    private func height(from start: Int, to end: Int) -> CGFloat {
-        CGFloat(min(end, windowEnd) - max(start, windowStart)) * hourHeight / 60
-    }
-
-    private func freeSlotView(_ slot: FreeSlot, day: Weekday) -> some View {
-        let blockHeight = height(from: slot.startMinutes, to: slot.endMinutes)
-        return RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Theme.carolinaBlue.opacity(0.15))
+    private func freeBlock(_ slot: FreeSlot, metrics: TimelineMetrics) -> some View {
+        Text("Free · \(slot.durationMinutes.spacedDuration)")
+            .font(.headline)
+            .foregroundStyle(Theme.textPrimary)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: max(30, metrics.height(from: slot.startMinutes, to: slot.endMinutes) - 3))
+            .background(
+                // Solid fill first so the hour lines do not show through the box.
+                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.cardBackground))
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Theme.carolinaBlue.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-            )
-            .overlay(alignment: .top) {
-                if blockHeight >= 44 {
-                    Text(slot.durationMinutes.durationString)
-                        .font(.caption2)
-                        .foregroundStyle(Theme.textPrimary)
-                        .minimumScaleFactor(0.7)
-                        .lineLimit(1)
-                        .padding(.top, 4)
-                }
-            }
-            .frame(height: blockHeight)
-            .padding(2)
-            .offset(y: yOffset(slot.startMinutes))
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Theme.carolinaBlue, style: StrokeStyle(lineWidth: 2.5, dash: [5, 5])))
+            .offset(y: metrics.y(slot.startMinutes) + 1)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(
-                "Free on \(day.fullName), \(slot.startMinutes.clockString) to \(slot.endMinutes.clockString), \(slot.durationMinutes.durationString)"
-            )
+                "Free for \(slot.durationMinutes.spacedDuration), \(slot.startMinutes.clockString) to \(slot.endMinutes.clockString)")
     }
 
-    private func classBlock(_ item: ClassSchedule, day: Weekday) -> some View {
-        let blockHeight = height(from: item.startMinutes, to: item.endMinutes)
-        return Button {
-            viewModel.selectedClass = item
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.courseCode)
-                    .font(.caption2.bold())
-                if blockHeight >= 56 {
-                    Text(item.startMinutes.clockString)
-                        .font(.caption2)
-                }
-            }
-            .foregroundStyle(Theme.navy)
-            .minimumScaleFactor(0.7)
-            .lineLimit(2)
-            .padding(4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Theme.carolinaBlue, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .frame(height: blockHeight)
-        .padding(2)
-        .offset(y: yOffset(item.startMinutes))
-        .accessibilityLabel(
-            "\(item.courseCode), \(item.title), \(day.fullName) \(item.startMinutes.clockString) to \(item.endMinutes.clockString), \(item.building) \(item.room)"
-        )
-        .accessibilityHint("Shows the instructor rating")
+    private func location(of cls: ClassSchedule) -> String {
+        [cls.building, cls.room].filter { !$0.isEmpty }.joined(separator: " ")
     }
 }
 
 #Preview {
-    let services = AppServices.preview()
-    let viewModel = ScheduleViewModel()
-    return TimetableView(viewModel: viewModel)
+    let model = ScheduleViewModel()
+    return TimetableView(viewModel: model, day: .tue)
         .environment(AppClock())
-        .task { await viewModel.load(from: services.schedule) }
+        .environment(AppServices.preview())
+        .task { await model.load(from: AppServices.preview().schedule) }
+        .background(Theme.screenBackground)
 }

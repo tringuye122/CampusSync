@@ -15,6 +15,42 @@ struct UserAccount: Codable, Equatable, Sendable {
     var displayName: String
     /// Lowercase, without the "@". Unique across all students.
     var handle: String
+    /// Optional, shown in the profile header ("CS '28"). Old cached accounts decode without them.
+    var major: String? = nil
+    var classYear: Int? = nil
+
+    /// "CS '28", "CS", "Class of '28", or nil when neither is set.
+    var affiliation: String? {
+        ProfileDetails.affiliation(major: major, classYear: classYear)
+    }
+}
+
+/// The optional major and graduation year on a profile, and how they read in the header.
+enum ProfileDetails {
+    static let majorMaxLength = 30
+    static let classYearRange = 2000...2100
+
+    static func affiliation(major: String?, classYear: Int?) -> String? {
+        let major = major?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let year = classYear.map { String(format: "'%02d", $0 % 100) }
+        switch (major?.isEmpty == false ? major : nil, year) {
+        case let (major?, year?): return "\(major) \(year)"
+        case let (major?, nil): return major
+        case let (nil, year?): return "Class of \(year)"
+        case (nil, nil): return nil
+        }
+    }
+
+    static func normalizedMajor(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : String(trimmed.prefix(majorMaxLength))
+    }
+
+    /// Nil for blank input; a year only if it is plausible.
+    static func parsedClassYear(_ raw: String) -> Int? {
+        guard let year = Int(raw.trimmingCharacters(in: .whitespaces)), classYearRange.contains(year) else { return nil }
+        return year
+    }
 }
 
 /// What Firebase Auth knows about the current user.
@@ -29,6 +65,8 @@ struct BackendUser: Equatable, Sendable {
 struct ProfileData: Equatable, Sendable {
     var displayName: String
     var handle: String
+    var major: String? = nil
+    var classYear: Int? = nil
 }
 
 enum AuthError: Error, Equatable {

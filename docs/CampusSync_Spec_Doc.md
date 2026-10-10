@@ -194,28 +194,18 @@ The app is a four-tab `TabView` with chunky cards and large tap targets, built t
 
 Support dark mode from the start by using asset-catalog colors instead of hard-coded hex values. Check that Carolina Blue text on white meets contrast requirements; use it for fills and use Navy for text.
 
-**Tab 1: Home**
+**Profile header (every tab).** Initials avatar (tap for Account and Friends), `@handle`, the UNC logo, a "Verified Member" pill once dues are paid, and "CS '28 · Free Tue/Thu 12:15–3:30". Major and class year are optional profile fields; the free window is the longest gap between classes that repeats on the same days.
 
-- Live Status banner: current or next class with a countdown, plus the gap summary ("45 min free before COMP 433").
-- Horizontal carousel of active invites from friends, soonest first.
+**Tab 1: Home.** One scroll: a blue "FREE NOW" hero (time until the next class, or the class you are in); a collapsible "Today · 4 classes" card; a horizontal row of "Friends free now" cards, one per friend, each with an avatar, a status line and a pill (Mutual Window, Free Now, In Class, or No Schedule when they share nothing; mutual windows first; pull down to refresh; tap to open that friend in Schedule > Friends); then a carousel of active invites with RSVP.
 
-**Tab 2: Schedule**
+**Tab 2: Schedule.** Segments: Timetable, Friends, Classes.
+- Timetable: Mon to Fri chips (today by default) and one scrollable day (8 AM to 10 PM): class blocks and dashed "Free · 3 h 15 min" boxes.
+- Friends: a row of friend avatars (one at a time) showing each friend's longest shared free time that day, the same day chips, and a two-column "You | Maya" timeline. The friend's blocks say only "Class". Mutual free time is outlined across both columns; tapping a window starts an invite for it (start at the window's next start, 60 minutes or what fits, only that friend).
+- Classes: a card per class with the first-listed instructor's RateMyProfessors rating inline (rating pill colored green at 4.0 and above, amber 3.0 to 3.9, red below 3.0; difficulty; would take again; number of ratings; "Low count" under 5 ratings). Real, cached, credited ratings only.
 
-- Segmented control: My Schedule and Friend Overlap.
-- My Schedule is a weekly timetable grid with class blocks and shaded free gaps. Tapping a class opens `ProfessorRatingSheet` (overall rating, difficulty, would-take-again %, top tags).
-- Friend Overlap picks a friend and highlights mutual free slots, longest first, with a "Make an invite for this slot" action.
-- A PDF import button sits in the toolbar and on the empty state.
+**Tab 3: Invites.** Category chips (All, Food, Study, Fitness, Social), a flat list soonest first ("Maya + 2 going", RSVP), and a navy "+ Post" button. Only friends you have added can be invited. Cards disappear when `expiresAt` passes.
 
-**Tab 3: Friend Invites**
-
-- Feed grouped by time, each card showing landmark, category pill, countdown, attendee count, and an RSVP button that toggles. Only friends you have added can be invited; the poster picks who gets each plan. Friends are added through handle search with request and accept.
-- Floating "+ Post" opens a compose sheet: title, landmark picker, category, start time, duration. Defaults should make posting a two-tap action.
-- Cards disappear when `expiresAt` passes.
-
-**Tab 4: Clubs**
-
-- Feed of GBMs and events with access badges: Public, Members Only, Dues Required. Club events are public, and members who subscribe are notified.
-- Dues Required cards show a one-tap "Pay Dues" button that flips local state, shows a confirmation, and adds a "Verified Member" badge to the profile.
+**Tab 4: Clubs.** A feed of upcoming club events (events are public). Each card shows the club with an access badge (Public, Dues Required · $25, Members Only), the event, date and time, location, and whether it fits your classes ("You are free then" or "Conflicts with LING 460 · 5:00–6:15 PM"), plus Join Club or Pay Dues. Filters: All clubs, Free for me, Joined. Pay Dues records a membership flag and shows Verified Member; no real payment.
 
 **Widget (`ScheduleWidget.swift`)**
 
@@ -279,10 +269,14 @@ Build the vertical slice that powers the demo first, then add features in order 
 | 6. PDF import | Parser, review screen, demo fallback, RateMyProfessors ratings | `ConnectCarolinaPDFParser.swift`, `ImportReviewView.swift`, `RateMyProfessorClient.swift` | Person A | 5 |
 | 7. Firebase foundation | Firebase project and SDK, Auth sign up and sign in (`@unc.edu`), user profile and handles, security rules and emulator tests | `firebase/firestore.rules`, auth views, `AuthService.swift` | Both | 6 |
 | 8. Sync and friends | Friend search, request and accept, Firestore repositories for schedule, invites and clubs, listeners feeding the snapshot writer, seeding script | `Firestore*Repository.swift`, friends views, `firebase/seed` | Both | 8 |
-| 9. Overlap | Overlap algorithm and view over real friends' schedules | `FriendScheduleOverlayView.swift`, `OverlapEngine.swift` | Person A | 3 |
-| 10. Clubs | Feed over Firestore, access badges, Join and Pay Dues memberships | `ClubEventCardView.swift`, `ClubsViewModel.swift` | Person B | 3 |
+| 9. Overlap | Overlap algorithm and view over real friends' schedules (now Schedule > Friends) | `FriendScheduleOverlayView.swift`, `OverlapEngine.swift` | Person A | 3 |
+| 10. UI redesign | The six supplied PDF designs: shared header, Home, Schedule (Timetable, Friends, Classes), Invites, Clubs feed. Absorbs the old Clubs phase | `AppHeader.swift`, `ClassesListView.swift`, `ClubEventCardView.swift`, `ClubsViewModel.swift` | Person B | 8 |
+| 10b. Design perfecting | Fix UI issues found on physical phones against the designs; then commit and push phases 9 and 10 | Views as needed | Both | 3 |
+| 10c. Clubs live | Seed the real project's clubs and events, verify Join and Pay Dues on device (deferred) | `firebase/seed` | Both | 1 |
 | 11. Polish | Dark mode, empty states, dev menu, time override, demo recording | Dev menu, assets | Both | 4 |
 | 12. Stretch | `.ics` import, push notifications (FCM), report and block, App Check | `ICSParser.swift`, push setup | Whoever is free | Optional |
+
+**Status (2026-10-10):** phases 0 to 10b are committed and pushed; the user signed off the UI on two physical phones. The Firestore rules for the redesign (optional major and class year) are deployed; clubs are not seeded on the real project, and the widget is deliberately untouched.
 
 **Cut order if time runs short:** Clubs polish, then overlap polish, then PDF import (fall back to demo schedule), then widget families beyond small and medium. Do not cut the widget, Friend Invites, or real accounts and sync; they are the pitch. If Firebase work slips, the local repositories and seed data remain as the fallback, but the plan is to demo on real networking.
 

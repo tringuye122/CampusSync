@@ -9,9 +9,27 @@
 import Foundation
 import Observation
 
+/// The three segments at the top of the Schedule tab.
+enum ScheduleSegment: String, CaseIterable, Identifiable {
+    case timetable = "Timetable"
+    case friends = "Friends"
+    case classes = "Classes"
+    var id: String { rawValue }
+}
+
 @Observable
 final class AppRouter {
     var selectedTab: AppTab = .home
+    var scheduleSegment: ScheduleSegment = .timetable
+    /// Set when a Home card opens the Friends segment on a particular friend.
+    var focusedFriendID: String?
+
+    /// Jumps to Schedule > Friends with `friendID` selected.
+    func showFriendOverlap(friendID: String) {
+        focusedFriendID = friendID
+        scheduleSegment = .friends
+        selectedTab = .schedule
+    }
 
     static let scheme = "campussync"
 

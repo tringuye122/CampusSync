@@ -65,11 +65,11 @@ const clubs = [
 ]
 
 const events = [
-  { id: 'seed-event-film', club: 'seed-club-film', title: 'Friday night screening', details: 'A surprise classic. Popcorn provided.', location: 'Student Union Auditorium', start: 5, access: 'public', duesAmount: 0 },
-  { id: 'seed-event-robots', club: 'seed-club-robots', title: 'Build night GBM', details: 'Kickoff for the spring bot. Bring a laptop.', location: 'Sitterson Hall', start: 8, access: 'duesRequired', duesAmount: 25 },
-  { id: 'seed-event-debate', club: 'seed-club-debate', title: 'Practice rounds', details: 'Members-only scrimmage, two topics.', location: 'Dey Hall', start: 22, access: 'membersOnly', duesAmount: 0 },
-  { id: 'seed-event-chess', club: 'seed-club-chess', title: 'Open play and ladder', details: 'All levels. Boards provided.', location: 'The Pit', start: 27, access: 'public', duesAmount: 0 },
-  { id: 'seed-event-culinary', club: 'seed-club-culinary', title: 'Pasta night', details: 'Cook together, then eat together.', location: 'Student Union Kitchen', start: 50, access: 'duesRequired', duesAmount: 15 },
+  { id: 'seed-event-film', club: 'seed-club-film', title: 'Friday night screening', details: 'A surprise classic. Popcorn provided.', location: 'Student Union Auditorium', start: 5, length: 2, access: 'public', duesAmount: 0 },
+  { id: 'seed-event-robots', club: 'seed-club-robots', title: 'Build night GBM', details: 'Kickoff for the spring bot. Bring a laptop.', location: 'Sitterson Hall', start: 8, length: 1.5, access: 'duesRequired', duesAmount: 25 },
+  { id: 'seed-event-debate', club: 'seed-club-debate', title: 'Practice rounds', details: 'Members-only scrimmage, two topics.', location: 'Dey Hall', start: 22, length: 1, access: 'membersOnly', duesAmount: 0 },
+  { id: 'seed-event-chess', club: 'seed-club-chess', title: 'Open play and ladder', details: 'All levels. Boards provided.', location: 'The Pit', start: 27, length: 1.5, access: 'public', duesAmount: 0 },
+  { id: 'seed-event-culinary', club: 'seed-club-culinary', title: 'Pasta night', details: 'Cook together, then eat together.', location: 'Student Union Kitchen', start: 50, length: 2, access: 'duesRequired', duesAmount: 15 },
 ]
 
 async function seedClubs() {
@@ -84,6 +84,7 @@ async function seedClubs() {
       details: event.details,
       location: event.location,
       startTime: hours(event.start),
+      endTime: hours(event.start + event.length),
       access: event.access,
       duesAmount: event.duesAmount,
       clubName: club.name,

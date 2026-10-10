@@ -60,6 +60,7 @@ struct ComposeInviteSheet: View {
                 Section {
                     ForEach(friends) { friend in
                         Toggle(friend.displayName, isOn: recipientBinding(for: friend.id))
+                            .tint(Theme.success)
                             .minTapTarget()
                     }
                 } header: {

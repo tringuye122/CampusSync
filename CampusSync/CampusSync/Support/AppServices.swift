@@ -21,6 +21,9 @@ final class AppServices {
     let friends: FriendRepository
     /// Firestore listeners that keep the local cache current. Idle until `start(account:)`.
     let sync: SyncCoordinator
+    /// Bumped after every local write (import, post, RSVP, join), so shared UI like the header
+    /// can reload. Server-driven changes are signalled by `sync.changeCount` instead.
+    private(set) var dataVersion = 0
     /// Seed and reset hooks for the dev menu.
     let store: LocalDataStore
     /// Keeps an in-memory preview container alive; a ModelContext does not own its container.
@@ -62,6 +65,7 @@ final class AppServices {
     /// Rewrites the widget snapshot from current local data and reloads widget timelines.
     /// Call after any local write (new invite, RSVP, import) and when the app foregrounds.
     func syncWidget() async {
+        dataVersion += 1
         let now = clock.now
         // No cached student means signed out: write an empty snapshot so the previous student's
         // classes and invites never linger on the Home Screen or Lock Screen.

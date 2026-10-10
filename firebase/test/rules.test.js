@@ -12,6 +12,7 @@ import {
 } from '@firebase/rules-unit-testing'
 import {
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   serverTimestamp,
@@ -178,6 +179,40 @@ describe('creating a profile', () => {
       createdAt: serverTimestamp(),
     })
     await assertFails(batch.commit())
+  })
+})
+
+describe('profile details (major and class year)', () => {
+  it('lets a new profile include a valid major and class year', async () => {
+    await assertSucceeds(claim(student('pat'), 'pat', 'pat', { major: 'CS', classYear: 2028 }))
+  })
+
+  it('refuses a malformed major or class year at creation', async () => {
+    await assertFails(claim(student('a1'), 'a1', 'a1x', { major: '' }))
+    await assertFails(claim(student('a2'), 'a2', 'a2x', { major: 'x'.repeat(31) }))
+    await assertFails(claim(student('a3'), 'a3', 'a3x', { classYear: '2028' }))
+    await assertFails(claim(student('a4'), 'a4', 'a4x', { classYear: 1999 }))
+    await assertFails(claim(student('a5'), 'a5', 'a5x', { nickname: 'nope' }))
+  })
+
+  it('lets you set, change and clear your own details', async () => {
+    await seedProfile('pat', 'pat')
+    const ref = doc(student('pat'), 'users', 'pat')
+    await assertSucceeds(updateDoc(ref, { major: 'Computer Science', classYear: 2028 }))
+    await assertSucceeds(updateDoc(ref, { classYear: 2027 }))
+    await assertSucceeds(updateDoc(ref, { major: deleteField(), classYear: deleteField() }))
+  })
+
+  it('refuses invalid details on update, and editing someone else', async () => {
+    await seedProfile('pat', 'pat')
+    await assertFails(updateDoc(doc(student('pat'), 'users', 'pat'), { classYear: 3000 }))
+    await assertFails(updateDoc(doc(student('pat'), 'users', 'pat'), { major: 5 }))
+    await assertFails(updateDoc(doc(student('eve'), 'users', 'pat'), { major: 'Hacked' }))
+  })
+
+  it('still refuses changing the handle', async () => {
+    await seedProfile('pat', 'pat')
+    await assertFails(updateDoc(doc(student('pat'), 'users', 'pat'), { handle: 'pat2', major: 'CS' }))
   })
 })
 

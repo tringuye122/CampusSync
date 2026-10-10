@@ -14,6 +14,8 @@ struct ProfileSetupView: View {
     @Environment(AuthService.self) private var auth
     @State private var displayName = ""
     @State private var handle = ""
+    @State private var major = ""
+    @State private var classYear = ""
     @State private var availability: AuthService.HandleAvailability = .unchecked
 
     var body: some View {
@@ -37,12 +39,21 @@ struct ProfileSetupView: View {
                 Text("Handles are 3 to 20 characters: lowercase letters, numbers and underscores. You can't change it later.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+
+                TextField("Major (optional, for example CS)", text: $major)
+                    .fieldStyle()
+                TextField("Class year (optional, for example 2028)", text: $classYear)
+                    .keyboardType(.numberPad)
+                    .fieldStyle()
+                Text("Shown in your header, like CS '28. You can change these later.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             AuthMessages()
 
             Button {
-                Task { await auth.createProfile(displayName: displayName, handle: handle) }
+                Task { await auth.createProfile(displayName: displayName, handle: handle, major: major, classYear: classYear) }
             } label: {
                 if auth.isBusy { ProgressView().tint(Theme.navy) } else { Text("Continue") }
             }
