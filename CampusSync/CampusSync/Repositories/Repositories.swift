@@ -1,0 +1,54 @@
+//
+//  Repositories.swift
+//  CampusSync
+//
+//  Views and ViewModels talk only to these protocols, never to SwiftData or
+//  Firestore. Methods are async throws so a Firestore implementation can swap in
+//  later. Writes here do not touch the widget; ViewModels rewrite the snapshot
+//  and reload timelines after a successful write.
+//
+
+import Foundation
+
+enum RepositoryError: Error {
+    case notSeeded
+    case notFound
+    case inviteFull
+    case notDuesClub
+}
+
+/// The signed-in user. One demo user in the MVP.
+protocol UserRepository {
+    func currentUser() async throws -> UserProfile
+}
+
+protocol ScheduleRepository {
+    func classes() async throws -> [ClassSchedule]
+    /// Replaces the whole schedule (used after the import review screen).
+    func replaceClasses(with classes: [ClassSchedule]) async throws
+    /// Same result as importing the sample PDF; the demo safety net.
+    func loadDemoSchedule() async throws
+    /// Only friends the user has added.
+    func friends() async throws -> [FriendProfile]
+    /// Mock rating lookup by instructor name. Demo data, not real scores.
+    func professorInfo(for instructor: String) async -> ProfessorInfo?
+}
+
+protocol InviteRepository {
+    /// Unexpired invites the user hosts or was invited to, soonest first.
+    /// Expiry is filtered here at read time (now > expiresAt).
+    func activeInvites(now: Date) async throws -> [OpenInvite]
+    func post(_ invite: OpenInvite) async throws
+    /// Adds or removes the current user as an attendee.
+    func toggleRSVP(inviteID: UUID) async throws
+}
+
+protocol ClubRepository {
+    func clubs() async throws -> [Club]
+    /// Upcoming events, soonest first.
+    func events(now: Date) async throws -> [ClubEvent]
+    /// Joining also subscribes the user to notifications for that club.
+    func joinClub(id: UUID) async throws
+    /// One tap: flips local state and marks the profile a Verified Member. No real payment.
+    func payDues(clubID: UUID) async throws
+}

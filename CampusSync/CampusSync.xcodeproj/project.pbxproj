@@ -71,6 +71,8 @@
 		F4352A18307A922500E76BB5 /* Exceptions for "CampusSync" folder in "ScheduleWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Models/WidgetSnapshot.swift,
+				Support/AppClock.swift,
 				Support/AppGroupManager.swift,
 			);
 			target = F43529E7307A8FF300E76BB5 /* ScheduleWidgetExtension */;
