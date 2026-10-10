@@ -24,6 +24,7 @@ struct InvitesTabView: View {
             .background(Theme.screenBackground)
             .navigationTitle("Friend Invites")
             .onAppear { Task { await viewModel.load(services: services, now: clock.now) } }
+            .onChange(of: services.sync.changeCount) { Task { await viewModel.load(services: services, now: clock.now) } }
             .sheet(isPresented: $isComposing) {
                 ComposeInviteSheet(
                     draft: viewModel.standardDraft(now: clock.now),

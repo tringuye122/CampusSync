@@ -17,7 +17,7 @@ final class InvitesViewModel {
     private(set) var user: UserProfile?
     var errorMessage: String?
 
-    var userID: UUID? { user?.id }
+    var userID: String? { user?.id }
 
     func load(services: AppServices, now: Date) async {
         do {

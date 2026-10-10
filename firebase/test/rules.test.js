@@ -15,6 +15,7 @@ import {
   doc,
   getDoc,
   serverTimestamp,
+  Timestamp,
   setDoc,
   updateDoc,
   writeBatch,
@@ -210,11 +211,375 @@ describe('reading and editing', () => {
   })
 })
 
+// MARK: friends
+
+const request = (from, to, overrides = {}) => ({
+  fromUID: from,
+  toUID: to,
+  status: 'pending',
+  createdAt: serverTimestamp(),
+  ...overrides,
+})
+
+async function seedRequest(from, to, status = 'pending') {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'friendRequests', `${from}_${to}`), {
+      fromUID: from, toUID: to, status, createdAt: new Date(),
+    })
+  })
+}
+
+/** The batch the app sends when `to` accepts: answer the request, then write both friend docs. */
+function accept(db, from, to) {
+  const batch = writeBatch(db)
+  batch.update(doc(db, 'friendRequests', `${from}_${to}`), { status: 'accepted' })
+  batch.set(doc(db, 'users', from, 'friends', to), { since: serverTimestamp() })
+  batch.set(doc(db, 'users', to, 'friends', from), { since: serverTimestamp() })
+  return batch.commit()
+}
+
+describe('friend requests', () => {
+  beforeEach(async () => {
+    await seedProfile('ann', 'ann')
+    await seedProfile('bob', 'bob')
+  })
+
+  it('lets a student send a request to a real account', async () => {
+    await assertSucceeds(setDoc(doc(student('ann'), 'friendRequests', 'ann_bob'), request('ann', 'bob')))
+  })
+
+  it('refuses a spoofed sender', async () => {
+    await assertFails(setDoc(doc(student('eve'), 'friendRequests', 'ann_bob'), request('ann', 'bob')))
+    await assertFails(setDoc(doc(student('eve'), 'friendRequests', 'eve_bob'), request('ann', 'bob')))
+  })
+
+  it('refuses a request to yourself', async () => {
+    await assertFails(setDoc(doc(student('ann'), 'friendRequests', 'ann_ann'), request('ann', 'ann')))
+  })
+
+  it('refuses a request to an account that does not exist', async () => {
+    await assertFails(setDoc(doc(student('ann'), 'friendRequests', 'ann_ghost'), request('ann', 'ghost')))
+  })
+
+  it('refuses a request that starts out accepted, or with extra fields', async () => {
+    await assertFails(setDoc(doc(student('ann'), 'friendRequests', 'ann_bob'), request('ann', 'bob', { status: 'accepted' })))
+    await assertFails(setDoc(doc(student('ann'), 'friendRequests', 'ann_bob'), request('ann', 'bob', { extra: 1 })))
+  })
+
+  it('refuses a request id that does not match the pair', async () => {
+    await assertFails(setDoc(doc(student('ann'), 'friendRequests', 'random'), request('ann', 'bob')))
+  })
+
+  it('refuses a duplicate request in the same direction', async () => {
+    await seedRequest('ann', 'bob')
+    await assertFails(setDoc(doc(student('ann'), 'friendRequests', 'ann_bob'), request('ann', 'bob')))
+  })
+
+  it('refuses unverified and non-UNC accounts', async () => {
+    await assertFails(setDoc(doc(unverified('ann'), 'friendRequests', 'ann_bob'), request('ann', 'bob')))
+    await assertFails(setDoc(doc(outsider('ann'), 'friendRequests', 'ann_bob'), request('ann', 'bob')))
+  })
+
+  it('shows a request only to the two people involved', async () => {
+    await seedRequest('ann', 'bob')
+    await assertSucceeds(getDoc(doc(student('ann'), 'friendRequests', 'ann_bob')))
+    await assertSucceeds(getDoc(doc(student('bob'), 'friendRequests', 'ann_bob')))
+    await assertFails(getDoc(doc(student('eve'), 'friendRequests', 'ann_bob')))
+  })
+
+  it('lets only the recipient accept or decline, and only the status', async () => {
+    await seedRequest('ann', 'bob')
+    await assertFails(updateDoc(doc(student('ann'), 'friendRequests', 'ann_bob'), { status: 'accepted' }))
+    await assertFails(updateDoc(doc(student('eve'), 'friendRequests', 'ann_bob'), { status: 'accepted' }))
+    await assertFails(updateDoc(doc(student('bob'), 'friendRequests', 'ann_bob'), { status: 'accepted', toUID: 'eve' }))
+    await assertSucceeds(updateDoc(doc(student('bob'), 'friendRequests', 'ann_bob'), { status: 'declined' }))
+  })
+
+  it('does not let an answered request be answered again', async () => {
+    await seedRequest('ann', 'bob', 'declined')
+    await assertFails(updateDoc(doc(student('bob'), 'friendRequests', 'ann_bob'), { status: 'accepted' }))
+  })
+
+  it('lets the sender cancel, and the recipient clear only an answered request', async () => {
+    await seedRequest('ann', 'bob')
+    await assertFails(deleteDoc(doc(student('bob'), 'friendRequests', 'ann_bob')))
+    await assertFails(deleteDoc(doc(student('eve'), 'friendRequests', 'ann_bob')))
+    await assertSucceeds(deleteDoc(doc(student('ann'), 'friendRequests', 'ann_bob')))
+    await seedRequest('ann', 'bob', 'accepted')
+    await assertSucceeds(deleteDoc(doc(student('bob'), 'friendRequests', 'ann_bob')))
+  })
+})
+
+describe('friendships', () => {
+  beforeEach(async () => {
+    await seedProfile('ann', 'ann')
+    await seedProfile('bob', 'bob')
+  })
+
+  it('writes both sides in the accept batch', async () => {
+    await seedRequest('ann', 'bob')
+    await assertSucceeds(accept(student('bob'), 'ann', 'bob'))
+    await assertSucceeds(getDoc(doc(student('ann'), 'users', 'ann', 'friends', 'bob')))
+    await assertSucceeds(getDoc(doc(student('bob'), 'users', 'bob', 'friends', 'ann')))
+  })
+
+  it('refuses a friend doc with no accepted request', async () => {
+    await assertFails(setDoc(doc(student('ann'), 'users', 'ann', 'friends', 'bob'), { since: serverTimestamp() }))
+    await seedRequest('ann', 'bob')
+    await assertFails(setDoc(doc(student('ann'), 'users', 'ann', 'friends', 'bob'), { since: serverTimestamp() }))
+    await seedRequest('ann', 'bob', 'declined')
+    await assertFails(setDoc(doc(student('bob'), 'users', 'bob', 'friends', 'ann'), { since: serverTimestamp() }))
+  })
+
+  it('refuses a stranger writing a friendship between two other people', async () => {
+    await seedRequest('ann', 'bob', 'accepted')
+    await assertFails(setDoc(doc(student('eve'), 'users', 'ann', 'friends', 'bob'), { since: serverTimestamp() }))
+  })
+
+  it('keeps each friends list private to its owner', async () => {
+    await seedRequest('ann', 'bob')
+    await accept(student('bob'), 'ann', 'bob')
+    await assertFails(getDoc(doc(student('bob'), 'users', 'ann', 'friends', 'bob')))
+    await assertFails(getDoc(doc(student('eve'), 'users', 'ann', 'friends', 'bob')))
+  })
+
+  it('refuses edits, and lets either person unfriend both sides', async () => {
+    await seedRequest('ann', 'bob')
+    await accept(student('bob'), 'ann', 'bob')
+    await assertFails(updateDoc(doc(student('ann'), 'users', 'ann', 'friends', 'bob'), { since: new Date() }))
+    await assertFails(deleteDoc(doc(student('eve'), 'users', 'ann', 'friends', 'bob')))
+    const bob = student('bob')
+    const batch = writeBatch(bob)
+    batch.delete(doc(bob, 'users', 'bob', 'friends', 'ann'))
+    batch.delete(doc(bob, 'users', 'ann', 'friends', 'bob'))
+    await assertSucceeds(batch.commit())
+  })
+})
+
+// MARK: schedules, invites, clubs
+
+async function befriend(a, b) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore()
+    await setDoc(doc(db, 'users', a, 'friends', b), { since: new Date() })
+    await setDoc(doc(db, 'users', b, 'friends', a), { since: new Date() })
+  })
+}
+
+const meeting = (overrides = {}) => ({
+  courseCode: 'COMP 523',
+  weekdays: [2, 4],
+  startMinutes: 805,
+  endMinutes: 880,
+  building: 'Sitterson Hall',
+  ...overrides,
+})
+
+describe('shared schedule', () => {
+  beforeEach(async () => {
+    await seedProfile('ann', 'ann')
+    await seedProfile('bob', 'bob')
+    await seedProfile('eve', 'eve')
+    await befriend('ann', 'bob')
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'schedules', 'ann', 'meetings', 'm1'), meeting())
+    })
+  })
+
+  it('lets the owner write meetings', async () => {
+    await assertSucceeds(setDoc(doc(student('ann'), 'schedules', 'ann', 'meetings', 'm2'), meeting()))
+  })
+
+  it('refuses writing to someone else\'s schedule', async () => {
+    await assertFails(setDoc(doc(student('bob'), 'schedules', 'ann', 'meetings', 'm2'), meeting()))
+  })
+
+  it('refuses course titles, instructors or anything beyond meeting times', async () => {
+    const db = student('ann')
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ title: 'Software Engineering Lab' })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ instructors: ['Someone'] })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ studentID: '123' })))
+  })
+
+  it('refuses malformed times and long strings', async () => {
+    const db = student('ann')
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ endMinutes: 800 })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ endMinutes: 1500 })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ weekdays: [] })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ building: 'x'.repeat(61) })))
+  })
+
+  it('lets the owner and accepted friends read, and no one else', async () => {
+    await assertSucceeds(getDoc(doc(student('ann'), 'schedules', 'ann', 'meetings', 'm1')))
+    await assertSucceeds(getDoc(doc(student('bob'), 'schedules', 'ann', 'meetings', 'm1')))
+    await assertFails(getDoc(doc(student('eve'), 'schedules', 'ann', 'meetings', 'm1')))
+    await assertFails(getDoc(doc(unverified('bob'), 'schedules', 'ann', 'meetings', 'm1')))
+  })
+
+  it('stops friends reading once the friendship is removed', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), 'users', 'ann', 'friends', 'bob'))
+    })
+    await assertFails(getDoc(doc(student('bob'), 'schedules', 'ann', 'meetings', 'm1')))
+  })
+
+  it('lets only the owner delete meetings', async () => {
+    await assertFails(deleteDoc(doc(student('bob'), 'schedules', 'ann', 'meetings', 'm1')))
+    await assertSucceeds(deleteDoc(doc(student('ann'), 'schedules', 'ann', 'meetings', 'm1')))
+  })
+})
+
+const inSeconds = (s) => Timestamp.fromMillis(Date.now() + s * 1000)
+const invite = (overrides = {}) => ({
+  title: 'Lunch at the Pit',
+  landmark: 'thePit',
+  category: 'food',
+  startTime: inSeconds(3600),
+  expiresAt: inSeconds(7200),
+  hostID: 'ann',
+  hostName: 'Ann Example',
+  attendeeIDs: ['ann'],
+  recipientIDs: ['bob'],
+  capacity: 8,
+  ...overrides,
+})
+
+async function seedInvite(id = 'i1', overrides = {}) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'invites', id), invite(overrides))
+  })
+}
+
+describe('friend invites', () => {
+  beforeEach(async () => {
+    await seedProfile('ann', 'ann', 'Ann Example')
+    await seedProfile('bob', 'bob', 'Bob Example')
+    await seedProfile('eve', 'eve', 'Eve Example')
+  })
+
+  it('lets a student post an invite as themselves', async () => {
+    await assertSucceeds(setDoc(doc(student('ann'), 'invites', 'i1'), invite()))
+  })
+
+  it('refuses a spoofed host or host name', async () => {
+    await assertFails(setDoc(doc(student('eve'), 'invites', 'i1'), invite()))
+    await assertFails(setDoc(doc(student('ann'), 'invites', 'i1'), invite({ hostName: 'Someone Else' })))
+  })
+
+  it('refuses invalid invites', async () => {
+    const db = student('ann')
+    await assertFails(setDoc(doc(db, 'invites', 'i1'), invite({ expiresAt: inSeconds(10) })))      // expires before it starts
+    await assertFails(setDoc(doc(db, 'invites', 'i1'), invite({ capacity: 1 })))
+    await assertFails(setDoc(doc(db, 'invites', 'i1'), invite({ capacity: 500 })))
+    await assertFails(setDoc(doc(db, 'invites', 'i1'), invite({ recipientIDs: [] })))
+    await assertFails(setDoc(doc(db, 'invites', 'i1'), invite({ recipientIDs: ['ann'] })))
+    await assertFails(setDoc(doc(db, 'invites', 'i1'), invite({ landmark: 'mars' })))
+    await assertFails(setDoc(doc(db, 'invites', 'i1'), invite({ title: '' })))
+    await assertFails(setDoc(doc(db, 'invites', 'i1'), invite({ attendeeIDs: ['ann', 'bob'] })))   // cannot RSVP others
+    await assertFails(setDoc(doc(db, 'invites', 'i1'), invite({ extra: true })))
+  })
+
+  it('shows an invite only to the host and the chosen recipients', async () => {
+    await seedInvite()
+    await assertSucceeds(getDoc(doc(student('ann'), 'invites', 'i1')))
+    await assertSucceeds(getDoc(doc(student('bob'), 'invites', 'i1')))
+    await assertFails(getDoc(doc(student('eve'), 'invites', 'i1')))
+  })
+
+  it('lets a recipient RSVP and cancel as themselves only', async () => {
+    await seedInvite()
+    const bob = student('bob')
+    await assertSucceeds(updateDoc(doc(bob, 'invites', 'i1'), { attendeeIDs: ['ann', 'bob'] }))
+    await assertSucceeds(updateDoc(doc(bob, 'invites', 'i1'), { attendeeIDs: ['ann'] }))
+  })
+
+  it('refuses RSVPing or removing someone else, and editing anything else', async () => {
+    await seedInvite('i1', { attendeeIDs: ['ann', 'bob'] })
+    const bob = student('bob')
+    await assertFails(updateDoc(doc(bob, 'invites', 'i1'), { attendeeIDs: ['bob'] }))                // removes the host
+    await assertFails(updateDoc(doc(bob, 'invites', 'i1'), { attendeeIDs: ['ann', 'bob', 'eve'] }))  // adds a stranger
+    await assertFails(updateDoc(doc(bob, 'invites', 'i1'), { title: 'Hijacked' }))
+    await assertFails(updateDoc(doc(bob, 'invites', 'i1'), { capacity: 99 }))
+    await assertFails(updateDoc(doc(student('eve'), 'invites', 'i1'), { attendeeIDs: ['ann', 'bob', 'eve'] }))
+  })
+
+  it('enforces capacity on RSVP', async () => {
+    await seedInvite('i1', { capacity: 2, attendeeIDs: ['ann', 'carl'] })
+    await assertFails(updateDoc(doc(student('bob'), 'invites', 'i1'), { attendeeIDs: ['ann', 'carl', 'bob'] }))
+  })
+
+  it('lets only the host delete', async () => {
+    await seedInvite()
+    await assertFails(deleteDoc(doc(student('bob'), 'invites', 'i1')))
+    await assertSucceeds(deleteDoc(doc(student('ann'), 'invites', 'i1')))
+  })
+})
+
+async function seedClub(id, access) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'clubs', id), { name: id, access, duesAmount: access === 'duesRequired' ? 25 : 0 })
+    await setDoc(doc(ctx.firestore(), 'clubs', id, 'events', 'e1'), { title: 'GBM' })
+  })
+}
+
+describe('clubs and memberships', () => {
+  beforeEach(async () => {
+    await seedProfile('ann', 'ann')
+    await seedClub('free', 'public')
+    await seedClub('paid', 'duesRequired')
+  })
+
+  it('lets verified students read clubs and events but never write them', async () => {
+    await assertSucceeds(getDoc(doc(student('ann'), 'clubs', 'free')))
+    await assertSucceeds(getDoc(doc(student('ann'), 'clubs', 'free', 'events', 'e1')))
+    await assertFails(getDoc(doc(outsider('ann'), 'clubs', 'free')))
+    await assertFails(setDoc(doc(student('ann'), 'clubs', 'new'), { name: 'x', access: 'public' }))
+    await assertFails(setDoc(doc(student('ann'), 'clubs', 'free', 'events', 'e2'), { title: 'x' }))
+  })
+
+  it('lets a student join a club and leave it', async () => {
+    const db = student('ann')
+    await assertSucceeds(setDoc(doc(db, 'users', 'ann', 'memberships', 'free'), { joinedAt: serverTimestamp(), duesPaid: false }))
+    await assertSucceeds(deleteDoc(doc(db, 'users', 'ann', 'memberships', 'free')))
+  })
+
+  it('refuses joining a club that does not exist or for someone else', async () => {
+    await assertFails(setDoc(doc(student('ann'), 'users', 'ann', 'memberships', 'ghost'), { joinedAt: serverTimestamp(), duesPaid: false }))
+    await assertFails(setDoc(doc(student('eve'), 'users', 'ann', 'memberships', 'free'), { joinedAt: serverTimestamp(), duesPaid: false }))
+  })
+
+  it('records dues only on a dues club', async () => {
+    const db = student('ann')
+    await assertFails(setDoc(doc(db, 'users', 'ann', 'memberships', 'free'), { joinedAt: serverTimestamp(), duesPaid: true }))
+    await assertSucceeds(setDoc(doc(db, 'users', 'ann', 'memberships', 'paid'), { joinedAt: serverTimestamp(), duesPaid: true }))
+  })
+
+  it('lets a member upgrade to dues paid on a dues club, but not downgrade or edit other fields', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', 'ann', 'memberships', 'paid'), { joinedAt: new Date(), duesPaid: false })
+      await setDoc(doc(ctx.firestore(), 'users', 'ann', 'memberships', 'free'), { joinedAt: new Date(), duesPaid: false })
+    })
+    const db = student('ann')
+    await assertFails(updateDoc(doc(db, 'users', 'ann', 'memberships', 'free'), { duesPaid: true }))
+    await assertFails(updateDoc(doc(db, 'users', 'ann', 'memberships', 'paid'), { joinedAt: new Date() }))
+    await assertSucceeds(updateDoc(doc(db, 'users', 'ann', 'memberships', 'paid'), { duesPaid: true }))
+    await assertFails(updateDoc(doc(db, 'users', 'ann', 'memberships', 'paid'), { duesPaid: false }))
+  })
+
+  it('keeps memberships private to their owner', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', 'ann', 'memberships', 'free'), { joinedAt: new Date(), duesPaid: false })
+    })
+    await assertSucceeds(getDoc(doc(student('ann'), 'users', 'ann', 'memberships', 'free')))
+    await assertFails(getDoc(doc(student('eve'), 'users', 'ann', 'memberships', 'free')))
+  })
+})
+
 describe('everything else is locked', () => {
   it('denies collections that have no rules yet', async () => {
     const db = student('pat')
-    await assertFails(getDoc(doc(db, 'invites', 'x')))
-    await assertFails(setDoc(doc(db, 'invites', 'x'), { title: 'hi' }))
+    await assertFails(getDoc(doc(db, 'reports', 'x')))
+    await assertFails(setDoc(doc(db, 'reports', 'x'), { title: 'hi' }))
     await assertFails(setDoc(doc(db, 'schedules', 'pat'), { meetings: [] }))
   })
 })

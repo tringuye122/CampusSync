@@ -15,16 +15,16 @@ import SwiftData
 
 enum SampleData {
     // Fixed IDs so seeding is deterministic and relationships line up.
-    static let userID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
-    static let mayaID = UUID(uuidString: "00000000-0000-0000-0000-000000000011")!
-    static let jordanID = UUID(uuidString: "00000000-0000-0000-0000-000000000012")!
-    static let samID = UUID(uuidString: "00000000-0000-0000-0000-000000000013")!
+    static let userID = "seed-user-demo"
+    static let mayaID = "seed-user-maya"
+    static let jordanID = "seed-user-jordan"
+    static let samID = "seed-user-sam"
 
-    static let robotsClubID = UUID(uuidString: "00000000-0000-0000-0000-0000000000A1")!
-    static let debateClubID = UUID(uuidString: "00000000-0000-0000-0000-0000000000A2")!
-    static let filmClubID = UUID(uuidString: "00000000-0000-0000-0000-0000000000A3")!
-    static let chessClubID = UUID(uuidString: "00000000-0000-0000-0000-0000000000A4")!
-    static let culinaryClubID = UUID(uuidString: "00000000-0000-0000-0000-0000000000A5")!
+    static let robotsClubID = "seed-club-robots"
+    static let debateClubID = "seed-club-debate"
+    static let filmClubID = "seed-club-film"
+    static let chessClubID = "seed-club-chess"
+    static let culinaryClubID = "seed-club-culinary"
 
     // MARK: Time helpers
 

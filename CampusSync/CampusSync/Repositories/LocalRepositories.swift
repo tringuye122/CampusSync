@@ -26,6 +26,10 @@ struct LocalDataStore {
     /// schedule, friends, club membership and Verified Member state. Returns true if it refreshed.
     @discardableResult
     func refreshIfStale(now: Date) throws -> Bool {
+        // Only the fictional demo cache is refreshed. A real account's cache holds real club
+        // events and an empty invite list is normal; replacing those with seed data would be wrong.
+        let users = try context.fetch(FetchDescriptor<UserProfile>())
+        guard users.contains(where: { $0.id.hasPrefix("seed-") }) else { return false }
         let invites = try context.fetch(FetchDescriptor<OpenInvite>())
         guard invites.allSatisfy({ $0.isExpired(at: now) }) else { return false }
 
@@ -110,6 +114,13 @@ final class LocalScheduleRepository: ScheduleRepository {
         return all.filter { friendIDs.contains($0.id) }
     }
 
+    var sharesScheduleWithFriends: Bool { ScheduleSharingSetting.isEnabled }
+
+    /// Local only: there is nothing to publish without Firestore.
+    func setSharesScheduleWithFriends(_ shares: Bool) async throws {
+        ScheduleSharingSetting.setEnabled(shares)
+    }
+
     func professorRating(for instructor: String) async -> ProfessorRatingLookup {
         await ratings.rating(for: instructor)
     }
@@ -143,7 +154,7 @@ final class LocalInviteRepository: InviteRepository {
         try context.save()
     }
 
-    func toggleRSVP(inviteID: UUID) async throws {
+    func toggleRSVP(inviteID: String) async throws {
         let user = try currentUser()
         let invites = try context.fetch(FetchDescriptor<OpenInvite>(predicate: #Predicate { $0.id == inviteID }))
         guard let invite = invites.first else { throw RepositoryError.notFound }
@@ -186,7 +197,7 @@ final class LocalClubRepository: ClubRepository {
         ))
     }
 
-    func joinClub(id: UUID) async throws {
+    func joinClub(id: String) async throws {
         let user = try currentUser()
         guard try club(id: id) != nil else { throw RepositoryError.notFound }
         if !user.joinedClubIDs.contains(id) {
@@ -195,7 +206,7 @@ final class LocalClubRepository: ClubRepository {
         try context.save()
     }
 
-    func payDues(clubID: UUID) async throws {
+    func payDues(clubID: String) async throws {
         let user = try currentUser()
         guard let club = try club(id: clubID) else { throw RepositoryError.notFound }
         guard club.access == .duesRequired else { throw RepositoryError.notDuesClub }
@@ -206,7 +217,7 @@ final class LocalClubRepository: ClubRepository {
         try context.save()
     }
 
-    private func club(id: UUID) throws -> Club? {
+    private func club(id: String) throws -> Club? {
         try context.fetch(FetchDescriptor<Club>(predicate: #Predicate { $0.id == id })).first
     }
 

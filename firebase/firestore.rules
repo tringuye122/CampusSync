@@ -2,9 +2,9 @@ rules_version = '2';
 
 // CampusSync Firestore security rules.
 //
-// Phase 7 covers accounts only: users/{uid} and handles/{handle}. Everything
-// else is denied by default; invites, schedules, friends and clubs get their
-// rules in the sync phase. Test with: cd firebase && npm test
+// Covers accounts and handles, the friend graph, shared schedules (meeting times only),
+// friend invites, clubs and memberships. Everything not listed is denied by default.
+// Test with: cd firebase && npm test
 //
 // Every rule starts from isVerifiedStudent(): a signed-in account whose email is
 // verified and ends in @unc.edu. The app checks this too, but the client is never trusted.
@@ -63,6 +63,171 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.handle == handle;
 
       allow update, delete: if false;
+    }
+
+    // Friend requests. The id is "{fromUID}_{toUID}", so a second request in the same
+    // direction is an update (denied) rather than a duplicate. Only the two people
+    // named on the document can read it.
+    match /friendRequests/{requestId} {
+      allow read: if isVerifiedStudent()
+        && (resource.data.fromUID == request.auth.uid || resource.data.toUID == request.auth.uid);
+
+      allow create: if isVerifiedStudent()
+        && request.resource.data.keys().hasOnly(['fromUID', 'toUID', 'status', 'createdAt'])
+        && request.resource.data.fromUID == request.auth.uid
+        && request.resource.data.toUID is string
+        && request.resource.data.toUID != request.auth.uid
+        && requestId == request.auth.uid + '_' + request.resource.data.toUID
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        // The recipient must be a real account.
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.toUID));
+
+      // Only the recipient answers, and only pending -> accepted/declined.
+      allow update: if isVerifiedStudent()
+        && resource.data.toUID == request.auth.uid
+        && resource.data.status == 'pending'
+        && request.resource.data.status in ['accepted', 'declined']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+
+      // The sender can cancel any time. Either person can clear an answered request,
+      // which is how unfriending removes the accepted request.
+      allow delete: if isVerifiedStudent()
+        && (resource.data.fromUID == request.auth.uid
+            || (resource.data.toUID == request.auth.uid && resource.data.status != 'pending'));
+    }
+
+    // Friend graph: users/{uid}/friends/{friendUID}. Exists on both sides. Only the
+    // owner reads their own list. A doc can be created only while an accepted request
+    // between the two people exists, which is what the accept batch writes first.
+    match /users/{uid}/friends/{friendUID} {
+      allow read: if isVerifiedStudent() && request.auth.uid == uid;
+
+      allow create: if isVerifiedStudent()
+        && (request.auth.uid == uid || request.auth.uid == friendUID)
+        && uid != friendUID
+        && request.resource.data.keys().hasOnly(['since'])
+        && request.resource.data.since == request.time
+        && (
+          (existsAfter(/databases/$(database)/documents/friendRequests/$(uid + '_' + friendUID))
+            && getAfter(/databases/$(database)/documents/friendRequests/$(uid + '_' + friendUID)).data.status == 'accepted')
+          || (existsAfter(/databases/$(database)/documents/friendRequests/$(friendUID + '_' + uid))
+            && getAfter(/databases/$(database)/documents/friendRequests/$(friendUID + '_' + uid)).data.status == 'accepted')
+        );
+
+      allow update: if false;
+
+      // Either person can remove the friendship, so unfriending clears both sides in one batch.
+      allow delete: if isVerifiedStudent()
+        && (request.auth.uid == uid || request.auth.uid == friendUID);
+    }
+
+    // MARK: Shared schedule
+    //
+    // schedules/{uid}/meetings/{meetingId}: one document per class meeting, with times
+    // and a building only. Never a course title, instructor, name or ID. One document per
+    // meeting (not a list) because rules cannot loop over a list, so the exact-keys check
+    // below is what enforces that nothing else can be stored. Readable by the owner and
+    // by accepted friends; the friends doc is the proof of friendship.
+    match /schedules/{uid}/meetings/{meetingId} {
+      allow read: if isVerifiedStudent()
+        && (request.auth.uid == uid
+            || exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid)));
+
+      allow create, update: if isVerifiedStudent()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['courseCode', 'weekdays', 'startMinutes', 'endMinutes', 'building'])
+        && request.resource.data.courseCode is string && request.resource.data.courseCode.size() <= 12
+        && request.resource.data.building is string && request.resource.data.building.size() <= 60
+        && request.resource.data.weekdays is list
+        && request.resource.data.weekdays.size() >= 1 && request.resource.data.weekdays.size() <= 5
+        && request.resource.data.startMinutes is int
+        && request.resource.data.endMinutes is int
+        && request.resource.data.startMinutes >= 0
+        && request.resource.data.endMinutes > request.resource.data.startMinutes
+        && request.resource.data.endMinutes <= 1440;
+
+      allow delete: if isVerifiedStudent() && request.auth.uid == uid;
+    }
+
+    // MARK: Friend invites
+    //
+    // Readable by the host and the people the host picked. Only the host creates one.
+    // Limitation: rules cannot loop over recipientIDs, so "recipients are all friends of
+    // the host" is enforced by the app, not here. Recipients can read the invite either way,
+    // and cannot add or edit anything but their own RSVP.
+    match /invites/{inviteId} {
+      allow read: if isVerifiedStudent()
+        && (resource.data.hostID == request.auth.uid
+            || request.auth.uid in resource.data.recipientIDs);
+
+      allow create: if isVerifiedStudent()
+        && request.resource.data.keys().hasOnly([
+             'title', 'landmark', 'category', 'startTime', 'expiresAt',
+             'hostID', 'hostName', 'attendeeIDs', 'recipientIDs', 'capacity'])
+        && request.resource.data.hostID == request.auth.uid
+        && request.resource.data.hostName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 1 && request.resource.data.title.size() <= 80
+        && request.resource.data.landmark in ['thePit', 'chaseDiningHall', 'davisLibrary', 'studentUnion', 'polkPlace', 'woollenGym']
+        && request.resource.data.category in ['food', 'study', 'fitness', 'social']
+        && request.resource.data.startTime is timestamp
+        && request.resource.data.expiresAt is timestamp
+        && request.resource.data.expiresAt > request.resource.data.startTime
+        && request.resource.data.capacity is int
+        && request.resource.data.capacity >= 2 && request.resource.data.capacity <= 50
+        && request.resource.data.recipientIDs is list
+        && request.resource.data.recipientIDs.size() >= 1 && request.resource.data.recipientIDs.size() <= 30
+        && !(request.auth.uid in request.resource.data.recipientIDs)
+        && request.resource.data.attendeeIDs.toSet().hasOnly([request.auth.uid]);
+
+      // RSVP: the host or a recipient may add or remove only themselves, within capacity.
+      allow update: if isVerifiedStudent()
+        && (resource.data.hostID == request.auth.uid || request.auth.uid in resource.data.recipientIDs)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attendeeIDs'])
+        && request.resource.data.attendeeIDs.size() <= resource.data.capacity
+        && request.resource.data.attendeeIDs.toSet().difference(resource.data.attendeeIDs.toSet()).hasOnly([request.auth.uid])
+        && resource.data.attendeeIDs.toSet().difference(request.resource.data.attendeeIDs.toSet()).hasOnly([request.auth.uid]);
+
+      allow delete: if isVerifiedStudent() && resource.data.hostID == request.auth.uid;
+    }
+
+    // MARK: Clubs
+    //
+    // Clubs and their events are public to any verified student and written only by the
+    // admin seeding script (which bypasses rules), never by a client.
+    match /clubs/{clubId} {
+      allow read: if isVerifiedStudent();
+      allow write: if false;
+
+      match /events/{eventId} {
+        allow read: if isVerifiedStudent();
+        allow write: if false;
+      }
+    }
+
+    // users/{uid}/memberships/{clubId}: joining a club, and "paying" dues (a flag, no money).
+    match /users/{uid}/memberships/{clubId} {
+      allow read: if isVerifiedStudent() && request.auth.uid == uid;
+
+      allow create: if isVerifiedStudent()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['joinedAt', 'duesPaid'])
+        && request.resource.data.joinedAt == request.time
+        && request.resource.data.duesPaid is bool
+        && exists(/databases/$(database)/documents/clubs/$(clubId))
+        // Dues can only be recorded on a club that asks for them.
+        && (request.resource.data.duesPaid == false
+            || get(/databases/$(database)/documents/clubs/$(clubId)).data.access == 'duesRequired');
+
+      // Only duesPaid false -> true, and only on a dues club.
+      allow update: if isVerifiedStudent()
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['duesPaid'])
+        && request.resource.data.duesPaid == true
+        && get(/databases/$(database)/documents/clubs/$(clubId)).data.access == 'duesRequired';
+
+      allow delete: if isVerifiedStudent() && request.auth.uid == uid;
     }
 
     // Deny everything not listed above.

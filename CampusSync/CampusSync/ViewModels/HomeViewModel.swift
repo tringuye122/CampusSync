@@ -13,7 +13,7 @@ import Observation
 final class HomeViewModel {
     private(set) var meetings: [SnapshotMeeting] = []
     private(set) var invites: [OpenInvite] = []
-    private(set) var userID: UUID?
+    private(set) var userID: String?
 
     func load(services: AppServices, now: Date) async {
         meetings = ((try? await services.schedule.classes()) ?? []).flatMap(\.snapshotMeetings)

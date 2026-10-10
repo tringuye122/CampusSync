@@ -30,6 +30,10 @@ protocol ScheduleRepository {
     func loadDemoSchedule() async throws
     /// Only friends the user has added.
     func friends() async throws -> [FriendProfile]
+    /// Whether class times (never titles or instructors) are shared with friends. On by default.
+    var sharesScheduleWithFriends: Bool { get }
+    /// Turning it off removes the shared times from the server; turning it on publishes them.
+    func setSharesScheduleWithFriends(_ shares: Bool) async throws
     /// RateMyProfessors rating for an instructor (cached; works offline once fetched).
     func professorRating(for instructor: String) async -> ProfessorRatingLookup
 }
@@ -40,7 +44,7 @@ protocol InviteRepository {
     func activeInvites(now: Date) async throws -> [OpenInvite]
     func post(_ invite: OpenInvite) async throws
     /// Adds or removes the current user as an attendee.
-    func toggleRSVP(inviteID: UUID) async throws
+    func toggleRSVP(inviteID: String) async throws
 }
 
 protocol ClubRepository {
@@ -48,7 +52,7 @@ protocol ClubRepository {
     /// Upcoming events, soonest first.
     func events(now: Date) async throws -> [ClubEvent]
     /// Joining also subscribes the user to notifications for that club.
-    func joinClub(id: UUID) async throws
+    func joinClub(id: String) async throws
     /// One tap: flips local state and marks the profile a Verified Member. No real payment.
-    func payDues(clubID: UUID) async throws
+    func payDues(clubID: String) async throws
 }

@@ -334,7 +334,7 @@ enum SampleWidgetData {
                             weekday: 3, startMinutes: 930, endMinutes: 1005),
         ]
         let invite = SnapshotInvite(
-            id: UUID(), title: "Study group", landmarkName: "Davis Library",
+            id: UUID().uuidString, title: "Study group", landmarkName: "Davis Library",
             landmarkSymbol: "books.vertical",
             startTime: tuesday.addingTimeInterval(45 * 60), expiresAt: tuesday.addingTimeInterval(165 * 60))
         let snapshot = WidgetSnapshot(

@@ -36,6 +36,7 @@ struct HomeDashboardView: View {
             }
             .sheet(isPresented: $showingAccount) { AccountView() }
             .onAppear { Task { await viewModel.load(services: services, now: clock.now) } }
+            .onChange(of: services.sync.changeCount) { Task { await viewModel.load(services: services, now: clock.now) } }
         }
     }
 

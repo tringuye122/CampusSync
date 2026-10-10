@@ -170,25 +170,25 @@ struct FreeSlot: Identifiable, Hashable {
 
 @Model
 final class UserProfile {
-    @Attribute(.unique) var id: UUID
+    @Attribute(.unique) var id: String
     var displayName: String
     var handle: String
     /// The friend graph. Comes from seed data in the MVP.
-    var friendIDs: [UUID]
+    var friendIDs: [String]
     /// Clubs the user joined or subscribed to (they are notified about these).
-    var joinedClubIDs: [UUID]
-    var rsvpedInviteIDs: [UUID]
+    var joinedClubIDs: [String]
+    var rsvpedInviteIDs: [String]
     /// One flag for the whole profile, as in the spec. If we ever need per-club
     /// dues, add a separate `duesPaidClubIDs` list rather than changing this.
     var isVerifiedMember: Bool
 
     init(
-        id: UUID = UUID(),
+        id: String = UUID().uuidString,
         displayName: String,
         handle: String,
-        friendIDs: [UUID] = [],
-        joinedClubIDs: [UUID] = [],
-        rsvpedInviteIDs: [UUID] = [],
+        friendIDs: [String] = [],
+        joinedClubIDs: [String] = [],
+        rsvpedInviteIDs: [String] = [],
         isVerifiedMember: Bool = false
     ) {
         self.id = id
@@ -205,7 +205,7 @@ final class UserProfile {
 /// produces several rows sharing a `courseCode`.
 @Model
 final class ClassSchedule {
-    @Attribute(.unique) var id: UUID
+    @Attribute(.unique) var id: String
     var courseCode: String
     var title: String
     var section: String
@@ -234,7 +234,7 @@ final class ClassSchedule {
     }
 
     init(
-        id: UUID = UUID(),
+        id: String = UUID().uuidString,
         courseCode: String,
         title: String,
         section: String,
@@ -268,11 +268,11 @@ final class ClassSchedule {
 
 @Model
 final class FriendProfile {
-    @Attribute(.unique) var id: UUID
+    @Attribute(.unique) var id: String
     var displayName: String
     var classes: [ClassMeeting]
 
-    init(id: UUID = UUID(), displayName: String, classes: [ClassMeeting]) {
+    init(id: String = UUID().uuidString, displayName: String, classes: [ClassMeeting]) {
         self.id = id
         self.displayName = displayName
         self.classes = classes
@@ -282,34 +282,34 @@ final class FriendProfile {
 /// A time-boxed plan sent only to friends the host picked (`recipientIDs`).
 @Model
 final class OpenInvite {
-    @Attribute(.unique) var id: UUID
+    @Attribute(.unique) var id: String
     var title: String
     var landmark: Landmark
     var category: InviteCategory
     var startTime: Date
     /// Absolute date (not a duration) so the widget can evaluate it without the app running.
     var expiresAt: Date
-    var hostID: UUID
+    var hostID: String
     var hostName: String
-    var attendeeIDs: [UUID]
+    var attendeeIDs: [String]
     /// Friends the host chose to invite.
-    var recipientIDs: [UUID]
+    var recipientIDs: [String]
     var capacity: Int
 
     /// Expired when now > expiresAt. Always filtered at read time.
     func isExpired(at now: Date) -> Bool { now > expiresAt }
 
     init(
-        id: UUID = UUID(),
+        id: String = UUID().uuidString,
         title: String,
         landmark: Landmark,
         category: InviteCategory,
         startTime: Date,
         expiresAt: Date,
-        hostID: UUID,
+        hostID: String,
         hostName: String,
-        attendeeIDs: [UUID] = [],
-        recipientIDs: [UUID] = [],
+        attendeeIDs: [String] = [],
+        recipientIDs: [String] = [],
         capacity: Int = 8
     ) {
         self.id = id
@@ -328,7 +328,7 @@ final class OpenInvite {
 
 @Model
 final class Club {
-    @Attribute(.unique) var id: UUID
+    @Attribute(.unique) var id: String
     var name: String
     var summary: String
     var symbol: String
@@ -337,7 +337,7 @@ final class Club {
     var duesAmount: Int
 
     init(
-        id: UUID = UUID(),
+        id: String = UUID().uuidString,
         name: String,
         summary: String,
         symbol: String,
@@ -356,8 +356,8 @@ final class Club {
 /// Club events are public; people who joined or subscribed to the club are notified.
 @Model
 final class ClubEvent {
-    @Attribute(.unique) var id: UUID
-    var clubID: UUID
+    @Attribute(.unique) var id: String
+    var clubID: String
     var clubName: String
     var title: String
     var details: String
@@ -368,8 +368,8 @@ final class ClubEvent {
     var duesAmount: Int
 
     init(
-        id: UUID = UUID(),
-        clubID: UUID,
+        id: String = UUID().uuidString,
+        clubID: String,
         clubName: String,
         title: String,
         details: String,

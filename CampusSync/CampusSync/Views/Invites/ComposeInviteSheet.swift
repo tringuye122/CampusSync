@@ -90,7 +90,7 @@ struct ComposeInviteSheet: View {
         }
     }
 
-    private func recipientBinding(for id: UUID) -> Binding<Bool> {
+    private func recipientBinding(for id: String) -> Binding<Bool> {
         Binding(
             get: { draft.recipientIDs.contains(id) },
             set: { isOn in

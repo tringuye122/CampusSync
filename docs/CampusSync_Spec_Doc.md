@@ -86,19 +86,19 @@ Firebase Auth and Firestore are the source of truth. The app uses the Firebase i
 | --- | --- | --- | --- |
 | `users/{uid}` | displayName, handle, createdAt | Any verified user (needed for handle search) | The owner |
 | `handles/{handle}` | uid | Any verified user | Create-only by the owner, which keeps handles unique |
-| `friendRequests/{id}` | fromUID, toUID, status, createdAt | The two people involved | Sender creates; recipient accepts or declines |
-| `users/{uid}/friends/{friendUID}` | since | The owner | Written for both people in one batch when a request is accepted, allowed only if an accepted request exists |
-| `schedules/{uid}` | meetings: weekday, start and end minutes, building, course code | The owner and accepted friends | The owner |
-| `invites/{id}` | hostID, hostName, title, landmark, category, startTime, expiresAt, attendeeIDs, recipientIDs, capacity | The host and the listed recipients | Host creates, with `hostID == auth.uid`, `expiresAt > startTime`, and capacity bounds; recipients may only add or remove themselves in `attendeeIDs` |
-| `clubs/{clubID}` and `clubs/{clubID}/events/{eventID}` | name, summary, access, duesAmount; event details | Any verified user | Admin script only |
-| `users/{uid}/memberships/{clubID}` | joinedAt, duesPaid | The owner | The owner |
+| `friendRequests/{fromUID}_{toUID}` | fromUID, toUID, status, createdAt | The two people involved | Sender creates (pending only, id fixes one request per direction); recipient accepts or declines; sender cancels, either deletes once answered |
+| `users/{uid}/friends/{friendUID}` | since | The owner | Written for both people in one batch when a request is accepted, allowed only if an accepted request exists; either person can delete both sides (unfriend) |
+| `schedules/{uid}/meetings/{n}` | One document per class meeting: courseCode, weekdays, startMinutes, endMinutes, building (exact keys enforced by the rules, so a title or instructor cannot be stored) | The owner and accepted friends (proved by `users/{uid}/friends/{viewer}` existing) | The owner |
+| `invites/{id}` | hostID, hostName, title, landmark, category, startTime, expiresAt, attendeeIDs, recipientIDs, capacity | The host and the listed recipients | Host creates, with `hostID == auth.uid`, `hostName` equal to the host's profile name, `expiresAt > startTime`, capacity 2 to 50, 1 to 30 recipients; the host or a recipient may only add or remove themselves in `attendeeIDs`, within capacity; only the host deletes. Rules cannot loop over `recipientIDs`, so "recipients are all friends" is enforced by the app, not the rules |
+| `clubs/{clubID}` and `clubs/{clubID}/events/{eventID}` | name, summary, symbol, access, duesAmount; event title, details, location, startTime, access, duesAmount | Any verified user | Admin seeding script only (`firebase/seed/seed.mjs`); clients are denied |
+| `users/{uid}/memberships/{clubID}` | joinedAt, duesPaid | The owner | The owner; the club must exist; `duesPaid` can only be set (false to true) on a dues-required club |
 
 Notes on the model:
 - The shared schedule document holds meeting times only. It never holds course titles, instructor names, the student's name, or any university ID, so a friend sees when you are busy and nothing more.
 - Query invites with `recipientIDs array-contains uid` and `expiresAt > now`, backed by a composite index. Clients also filter expired invites at read time, and a Firestore TTL policy on `expiresAt` deletes old documents.
 - The existing models map across: `OpenInvite` to `invites`, `FriendProfile` to a cached copy of a friend's `schedules` document, `UserProfile.friendIDs` to the `friends` subcollection, and `Club` and `ClubEvent` to `clubs` and `events`.
 
-**Sync.** Each Firestore repository exposes an async API plus a snapshot listener. ViewModels consume the listener, the repository mirrors results into the local store for offline use, and any change triggers the widget snapshot rewrite and `reloadAllTimelines()`. Firestore's offline persistence is on, so recently seen data keeps working with no connection.
+**Sync (as built).** `SyncCoordinator` owns the listeners (my hosted invites, invites I was sent, my friends, my memberships, the clubs collection) and mirrors results into the SwiftData cache; the Firestore repositories read the cache and send writes to Firestore without waiting for the server, so Firestore's offline queue holds them. Friends' shared meetings are fetched when the friend list changes and on app foreground or pull to refresh. Sign-out stops the listeners and wipes the cache. Original plan: each Firestore repository exposes an async API plus a snapshot listener. ViewModels consume the listener, the repository mirrors results into the local store for offline use, and any change triggers the widget snapshot rewrite and `reloadAllTimelines()`. Firestore's offline persistence is on, so recently seen data keeps working with no connection.
 
 **Security rules.** Rules live in the repo (`firebase/firestore.rules`) with indexes (`firebase/firestore.indexes.json`) and are tested in the Firebase emulator before any real write is allowed. `GoogleService-Info.plist` and any service account key are never committed.
 

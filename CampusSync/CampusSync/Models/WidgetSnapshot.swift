@@ -46,7 +46,7 @@ nonisolated struct SnapshotMeeting: Codable, Equatable {
 }
 
 nonisolated struct SnapshotInvite: Codable, Equatable {
-    var id: UUID
+    var id: String
     var title: String
     var landmarkName: String
     var landmarkSymbol: String

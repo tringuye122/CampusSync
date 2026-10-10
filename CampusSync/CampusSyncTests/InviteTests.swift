@@ -19,7 +19,7 @@ struct InviteTests {
 
     private func minutes(_ value: Int) -> Date { now.addingTimeInterval(TimeInterval(value * 60)) }
 
-    private func invite(start: Int, expires: Int, host: UUID = SampleData.mayaID) -> OpenInvite {
+    private func invite(start: Int, expires: Int, host: String = SampleData.mayaID) -> OpenInvite {
         OpenInvite(title: "T", landmark: .thePit, category: .social, startTime: minutes(start),
                    expiresAt: minutes(expires), hostID: host, hostName: "H")
     }

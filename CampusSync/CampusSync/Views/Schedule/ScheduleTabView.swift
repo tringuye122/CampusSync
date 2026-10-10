@@ -47,6 +47,8 @@ struct ScheduleTabView: View {
             .background(Theme.screenBackground)
             .navigationTitle("Schedule")
             .onAppear { Task { await viewModel.load(from: services.schedule) } }
+            // Reload when sync mirrors new data into the cache.
+            .onChange(of: services.sync.changeCount) { Task { await viewModel.load(from: services.schedule) } }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {

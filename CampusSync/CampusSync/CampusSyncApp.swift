@@ -24,15 +24,12 @@ struct CampusSyncApp: App {
         // Development only: point at local emulators when FIREBASE_EMULATOR_HOST is set.
         FirebaseEmulator.configureIfRequested()
 
-        let container: ModelContainer
-        do {
-            container = try ModelContainer(for: Schema(AppSchema.models))
-        } catch {
-            fatalError("Could not create the SwiftData container: \(error)")
-        }
+        let container = Self.makeContainer()
 
         let clock = AppClock()
-        let services = AppServices(context: container.mainContext, clock: clock)
+        let services = AppServices(
+            context: container.mainContext, clock: clock, friends: FirestoreFriendRepository(),
+            useFirestore: true)
         // Seed only when the store is empty. Offline, no network involved.
         try? services.store.seedIfNeeded(now: clock.now)
         // Seed invites are timed relative to first launch, so refresh them if they have all expired.
@@ -42,6 +39,45 @@ struct CampusSyncApp: App {
         _auth = State(initialValue: AuthService(backend: FirebaseAuthBackend()))
         _clock = State(initialValue: clock)
         _services = State(initialValue: services)
+    }
+
+    /// The SwiftData store is only a cache. Bump this name whenever the schema changes in a
+    /// way SwiftData cannot migrate (v2: UUID -> String ids). The old file is never opened,
+    /// so there is nothing to migrate; seeding and Firestore refill the new cache.
+    private static let storeName = "CampusSyncCache-v2"
+
+    private static func makeContainer() -> ModelContainer {
+        let schema = Schema(AppSchema.models)
+        let configuration = ModelConfiguration(storeName, schema: schema)
+        removeStoreFiles(named: "default", besides: configuration.url)   // the pre-v2 store
+
+        if let container = try? ModelContainer(for: schema, configurations: configuration) {
+            return container
+        }
+        // The new store exists but will not open (corrupt, or a later schema change that was
+        // not renamed). It is only a cache, so delete it and start empty.
+        print("SwiftData cache could not be opened; rebuilding it.")
+        removeStoreFiles(named: storeName, besides: nil, directory: configuration.url.deletingLastPathComponent())
+        do {
+            return try ModelContainer(for: schema, configurations: configuration)
+        } catch {
+            fatalError("Could not create the SwiftData container: \(error)")
+        }
+    }
+
+    /// Best-effort delete of `<name>.store` and its -shm/-wal files next to `besides`
+    /// (or in `directory`). Failures are logged, not fatal.
+    private static func removeStoreFiles(named name: String, besides sibling: URL?, directory: URL? = nil) {
+        guard let folder = directory ?? sibling?.deletingLastPathComponent() else { return }
+        for suffix in [".store", ".store-shm", ".store-wal"] {
+            let url = folder.appendingPathComponent(name + suffix)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            do {
+                try FileManager.default.removeItem(at: url)
+            } catch {
+                print("Could not remove \(url.lastPathComponent): \(error)")
+            }
+        }
     }
 
     var body: some Scene {
@@ -55,6 +91,17 @@ struct CampusSyncApp: App {
             .environment(auth)
             .onOpenURL { router.open($0) }
             .task { await auth.refresh() }
+            // Start Firestore sync once a verified student with a handle is signed in; stop
+            // and wipe the cache on sign-out. The app still launches and works with no connection.
+            .onChange(of: auth.account, initial: true) { _, account in
+                if let account {
+                    services.sync.start(account: account)
+                } else if case .signedOut = auth.state {
+                    // Only on an explicit sign-out. While auth is still loading at launch the
+                    // account is nil too, and the offline cache must survive that.
+                    services.sync.stop(wipeCache: true)
+                }
+            }
             .task {
                 await services.syncWidget()
                 // Cache RateMyProfessors ratings now so the rating sheet works offline later.
@@ -67,6 +114,7 @@ struct CampusSyncApp: App {
             if phase == .active {
                 Task {
                     await auth.refresh()
+                    await services.sync.refreshAll()
                     await services.syncWidget()
                 }
             }
