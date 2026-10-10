@@ -5,6 +5,7 @@
 //  Created by Tri Nguyen on 10/10/26.
 //
 
+import FirebaseCore
 import SwiftData
 import SwiftUI
 
@@ -14,9 +15,15 @@ struct CampusSyncApp: App {
     @State private var clock: AppClock
     @State private var services: AppServices
     @State private var router = AppRouter()
+    @State private var auth: AuthService
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        // Must run before any other Firebase call. Reads the git-ignored GoogleService-Info.plist.
+        FirebaseApp.configure()
+        // Development only: point at local emulators when FIREBASE_EMULATOR_HOST is set.
+        FirebaseEmulator.configureIfRequested()
+
         let container: ModelContainer
         do {
             container = try ModelContainer(for: Schema(AppSchema.models))
@@ -32,28 +39,36 @@ struct CampusSyncApp: App {
         try? services.store.refreshIfStale(now: clock.now)
 
         self.container = container
+        _auth = State(initialValue: AuthService(backend: FirebaseAuthBackend()))
         _clock = State(initialValue: clock)
         _services = State(initialValue: services)
     }
 
     var body: some Scene {
         WindowGroup {
-            MainTabView()
-                .environment(clock)
-                .environment(services)
-                .environment(router)
-                .onOpenURL { router.open($0) }
-                .task {
-                    await services.syncWidget()
-                    // Cache RateMyProfessors ratings now so the rating sheet works offline later.
-                    await services.warmProfessorRatings()
-                }
+            AuthGateView {
+                MainTabView()
+            }
+            .environment(clock)
+            .environment(services)
+            .environment(router)
+            .environment(auth)
+            .onOpenURL { router.open($0) }
+            .task { await auth.refresh() }
+            .task {
+                await services.syncWidget()
+                // Cache RateMyProfessors ratings now so the rating sheet works offline later.
+                await services.warmProfessorRatings()
+            }
         }
         .modelContainer(container)
         .onChange(of: scenePhase) { _, phase in
             // Refresh the widget whenever the app comes to the foreground.
             if phase == .active {
-                Task { await services.syncWidget() }
+                Task {
+                    await auth.refresh()
+                    await services.syncWidget()
+                }
             }
         }
     }

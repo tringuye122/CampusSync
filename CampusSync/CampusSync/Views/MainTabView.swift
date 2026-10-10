@@ -42,4 +42,5 @@ struct MainTabView: View {
         .environment(AppServices.preview())
         .environment(AppClock())
         .environment(AppRouter())
+        .environment(AuthService(backend: MockAuthBackend(), defaults: UserDefaults(suiteName: "preview-auth")!))
 }

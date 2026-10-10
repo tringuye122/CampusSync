@@ -12,6 +12,7 @@ struct HomeDashboardView: View {
     @Environment(AppServices.self) private var services
     @Environment(AppClock.self) private var clock
     @State private var viewModel = HomeViewModel()
+    @State private var showingAccount = false
 
     var body: some View {
         NavigationStack {
@@ -26,6 +27,14 @@ struct HomeDashboardView: View {
             }
             .background(Theme.screenBackground)
             .navigationTitle("Home")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showingAccount = true } label: {
+                        Label("Account", systemImage: "person.crop.circle")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingAccount) { AccountView() }
             .onAppear { Task { await viewModel.load(services: services, now: clock.now) } }
         }
     }
@@ -74,4 +83,5 @@ struct HomeDashboardView: View {
     HomeDashboardView()
         .environment(AppServices.preview())
         .environment(AppClock())
+        .environment(AuthService(backend: MockAuthBackend(), defaults: UserDefaults(suiteName: "preview-auth")!))
 }
