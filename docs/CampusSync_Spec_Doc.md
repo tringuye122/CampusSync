@@ -194,13 +194,13 @@ The app is a four-tab `TabView` with chunky cards and large tap targets, built t
 
 Support dark mode from the start by using asset-catalog colors instead of hard-coded hex values. Check that Carolina Blue text on white meets contrast requirements; use it for fills and use Navy for text.
 
-**Profile header (every tab).** Initials avatar (tap for Account and Friends), `@handle`, the UNC logo, a "Verified Member" pill once dues are paid, and "CS '28 · Free Tue/Thu 12:15–3:30". Major and class year are optional profile fields; the free window is the longest gap between classes that repeats on the same days.
+**Profile header (every tab).** Initials avatar (tap for Account), `@handle`, the UNC logo, a "Verified Member" pill once dues are paid, and "CS '28". Major and class year are optional profile fields.
 
 **Tab 1: Home.** One scroll: a blue "FREE NOW" hero (time until the next class, or the class you are in); a collapsible "Today · 4 classes" card; a horizontal row of "Friends free now" cards, one per friend, each with an avatar, a status line and a pill (Mutual Window, Free Now, In Class, or No Schedule when they share nothing; mutual windows first; pull down to refresh; tap to open that friend in Schedule > Friends); then a carousel of active invites with RSVP.
 
 **Tab 2: Schedule.** Segments: Timetable, Friends, Classes.
 - Timetable: Mon to Fri chips (today by default) and one scrollable day (8 AM to 10 PM): class blocks and dashed "Free · 3 h 15 min" boxes.
-- Friends: a row of friend avatars (one at a time) showing each friend's longest shared free time that day, the same day chips, and a two-column "You | Maya" timeline. The friend's blocks say only "Class". Mutual free time is outlined across both columns; tapping a window starts an invite for it (start at the window's next start, 60 minutes or what fits, only that friend).
+- Friends: a row that starts with a + tile (opens the Add friends sheet: search by handle, accept or decline requests, cancel sent ones; a red count on the tile shows waiting requests) followed by friend avatars (one at a time; long-press for Unfriend) showing each friend's longest shared free time that day, the same day chips, and a two-column "You | Maya" timeline. The friend's blocks say only "Class". Mutual free time is outlined across both columns; tapping a window starts an invite for it (start at the window's next start, 60 minutes or what fits, only that friend).
 - Classes: a card per class with the first-listed instructor's RateMyProfessors rating inline (rating pill colored green at 4.0 and above, amber 3.0 to 3.9, red below 3.0; difficulty; would take again; number of ratings; "Low count" under 5 ratings). Real, cached, credited ratings only.
 
 **Tab 3: Invites.** Category chips (All, Food, Study, Fitness, Social), a flat list soonest first ("Maya + 2 going", RSVP), and a navy "+ Post" button. Only friends you have added can be invited. Cards disappear when `expiresAt` passes.

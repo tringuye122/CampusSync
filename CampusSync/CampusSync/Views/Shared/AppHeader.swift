@@ -2,7 +2,7 @@
 //  AppHeader.swift
 //  CampusSync
 //
-//  The profile header at the top of every tab: avatar (tap for Account and Friends),
+//  The profile header at the top of every tab: avatar (tap for Account),
 //  @handle, the university logo, then a Verified Member pill and "CS '28".
 //
 
@@ -22,7 +22,7 @@ struct AppHeader: View {
                 }
                 .buttonStyle(.plain)
                 .minTapTarget()
-                .accessibilityLabel("Account and friends")
+                .accessibilityLabel("Account")
                 .accessibilityHint("Opens your account")
 
                 Text(handleText)

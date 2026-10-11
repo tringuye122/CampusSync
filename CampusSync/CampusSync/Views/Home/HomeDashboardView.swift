@@ -51,7 +51,7 @@ struct HomeDashboardView: View {
             sectionTitle("Friends free now")
             if entries.isEmpty {
                 Text(viewModel.friends.isEmpty
-                     ? "Add friends from your avatar, then you'll see who is free with you."
+                     ? "Add friends in Schedule > Friends, then you'll see who is free here."
                      : "No friends to show yet.")
                     .font(.subheadline)
                     .foregroundStyle(Theme.textPrimary)

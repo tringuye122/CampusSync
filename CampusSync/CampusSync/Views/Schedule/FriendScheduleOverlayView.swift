@@ -16,25 +16,41 @@ struct FriendScheduleOverlayView: View {
     @Environment(AppClock.self) private var clock
     @Environment(AppRouter.self) private var router
     @State private var viewModel = FriendOverlapViewModel()
+    @State private var isAddingFriends = false
+    @State private var friendToRemove: FriendProfile?
 
     var body: some View {
         VStack(spacing: 12) {
+            // The row (with the + tile) is always there: it is how you add the first friend.
+            friendPicker
             switch viewModel.state {
             case .noFriends:
                 message("No friends yet", "person.2.fill",
-                        "Add friends from your avatar at the top, then compare schedules here.")
+                        "Tap + to find a friend by their handle, then compare schedules here.")
             case .noOwnSchedule:
                 message("Add your schedule first", "calendar.badge.plus",
                         "Import your ConnectCarolina PDF or load the demo schedule in Classes.")
             case .friendHasNoSchedule(let name):
-                friendPicker
                 message("\(name) hasn't shared a schedule", "calendar.badge.exclamationmark",
                         "They may not have imported one yet, or they turned off sharing.")
             case .ready:
-                friendPicker
                 DayChips(selection: $day).padding(.horizontal, 16)
                 timeline
             }
+        }
+        .sheet(isPresented: $isAddingFriends, onDismiss: { Task { await reload() } }) {
+            AddFriendsSheet()
+        }
+        .confirmationDialog(
+            "Remove \(friendToRemove?.displayName ?? "friend")?",
+            isPresented: Binding(get: { friendToRemove != nil }, set: { if !$0 { friendToRemove = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Unfriend", role: .destructive) {
+                if let friend = friendToRemove { Task { await viewModel.unfriend(friend, services: services) } }
+            }
+        } message: {
+            Text("You will stop seeing each other's schedules.")
         }
         .onAppear { Task { await reload() } }
         .onChange(of: services.sync.changeCount) { Task { await reload() } }
@@ -79,6 +95,7 @@ struct FriendScheduleOverlayView: View {
     private var friendPicker: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 14) {
+                addTile
                 ForEach(viewModel.friends) { friend in
                     let isSelected = friend.id == viewModel.selectedFriendID
                     Button { viewModel.selectedFriendID = friend.id } label: {
@@ -97,11 +114,46 @@ struct FriendScheduleOverlayView: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("\(friend.displayName), \(longestText(for: friend, spoken: true)) on \(day.fullName)")
                     .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+                    .contextMenu {
+                        Button("Unfriend", systemImage: "person.badge.minus", role: .destructive) { friendToRemove = friend }
+                    }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 4)
         }
+    }
+
+    /// The first tile in the row: opens the Add friends sheet. A red count shows waiting requests.
+    private var addTile: some View {
+        Button { isAddingFriends = true } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "plus")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(width: 60, height: 60)
+                    .background(Theme.pillBackground, in: Circle())
+                    .overlay(Circle().strokeBorder(Theme.carolinaBlue, style: StrokeStyle(lineWidth: 2.5, dash: [5, 5])))
+                    .overlay(alignment: .topTrailing) {
+                        if viewModel.pendingRequestCount > 0 {
+                            Text("\(viewModel.pendingRequestCount)")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Color.white)
+                                .frame(minWidth: 22, minHeight: 22)
+                                .background(Theme.ratingPoor, in: Capsule())
+                                .offset(x: 6, y: -4)
+                        }
+                    }
+                Text("Add")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.textPrimary)
+            }
+            .frame(minWidth: 64)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(viewModel.pendingRequestCount > 0
+                            ? "Add friends, \(viewModel.pendingRequestCount) waiting requests"
+                            : "Add friends")
     }
 
     private func firstName(_ friend: FriendProfile) -> String {

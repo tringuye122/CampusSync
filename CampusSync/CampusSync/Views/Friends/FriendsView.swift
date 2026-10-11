@@ -2,8 +2,8 @@
 //  FriendsView.swift
 //  CampusSync
 //
-//  Find students by handle, answer requests, and see your friends. Opened from the
-//  Account screen. Lists keep their last values when the network drops.
+//  Find students by handle, answer requests, and see your friends. Shown in the Add friends
+//  sheet on Schedule > Friends. Lists keep their last values when the network drops.
 //
 
 import SwiftUI
@@ -35,10 +35,12 @@ struct FriendsView: View {
                             Spacer()
                             Button("Decline") { Task { await viewModel.decline(request, services: services) } }
                                 .buttonStyle(.bordered)
+                                .tint(Theme.textPrimary)
                                 .minTapTarget()
                             Button("Accept") { Task { await viewModel.accept(request, services: services) } }
                                 .buttonStyle(.borderedProminent)
                                 .tint(Theme.carolinaBlue)
+                                .foregroundStyle(Theme.navy)
                                 .minTapTarget()
                         }
                         .buttonStyle(.borderless)
@@ -54,6 +56,7 @@ struct FriendsView: View {
                             Spacer()
                             Button("Cancel") { Task { await viewModel.cancel(request, services: services) } }
                                 .buttonStyle(.borderless)
+                                .tint(Theme.textPrimary)
                                 .minTapTarget()
                         }
                     }
@@ -78,7 +81,7 @@ struct FriendsView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Theme.screenBackground)
-        .navigationTitle("Friends")
+        .navigationTitle("Add friends")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
             await viewModel.load(services: services)
@@ -107,11 +110,13 @@ struct FriendsView: View {
                         Button("Accept") { Task { await viewModel.accept(request, services: services) } }
                             .buttonStyle(.borderedProminent)
                             .tint(Theme.carolinaBlue)
+                            .foregroundStyle(Theme.navy)
                             .minTapTarget()
                     case .stranger:
                         Button("Add") { Task { await viewModel.sendRequest(to: result, services: services) } }
                             .buttonStyle(.borderedProminent)
                             .tint(Theme.carolinaBlue)
+                            .foregroundStyle(Theme.navy)
                             .minTapTarget()
                     }
                 }

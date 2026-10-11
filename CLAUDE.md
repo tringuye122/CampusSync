@@ -56,7 +56,7 @@ ConnectCarolina class-schedule PDF is the primary import. `.ics` is a stretch im
 - Carolina Blue `#7BAFD4` (fills, buttons, selected tab). Navy `#13294B` for text and dark surfaces. Use asset-catalog colors so dark mode works.
 - Cards: 20 pt corner radius, 16 pt padding, minimum 44 pt tap targets. Shared `CardStyle` modifier in `Theme.swift`.
 - Category pills (Food, Study, Fitness, Social) always pair color with an SF Symbol. Support Dynamic Type and add VoiceOver labels to timetable blocks.
-- Four tabs: Home, Schedule (Timetable / Friends / Classes), Invites, Clubs. Every tab sits under one profile header (avatar, @handle, UNC logo, Verified Member pill, "CS '28 · Free Tue/Thu 12:15–3:30"); the avatar opens Account and Friends.
+- Four tabs: Home, Schedule (Timetable / Friends / Classes), Invites, Clubs. Every tab sits under one profile header (avatar, @handle, UNC logo, Verified Member pill, "CS '28"); the avatar opens Account. Friends are managed on Schedule > Friends: a + tile first in the friends row opens the Add friends sheet (search, requests, sent), with a request count badge, and a long-press on a friend's avatar offers Unfriend.
 - Screens follow the six PDF designs the user supplied (Home unified scroll, Schedule, Friend Overlap, Classes with inline ratings, Invites, Clubs). Status colors (Success, Caution, Danger and surfaces) are asset-catalog tokens in `Theme.swift`. Day timelines cover 8 AM to 10 PM, scroll, and open at about 9 AM.
 
 ## Project layout

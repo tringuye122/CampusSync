@@ -24,6 +24,8 @@ final class FriendOverlapViewModel {
     private(set) var friends: [FriendProfile] = []
     private(set) var myMeetings: [ClassMeeting] = []
     private(set) var windows: [OverlapWindow] = []
+    /// Friend requests waiting for an answer, shown as a badge on the + tile.
+    private(set) var pendingRequestCount = 0
     var selectedFriendID: String? {
         didSet { recompute() }
     }
@@ -85,6 +87,10 @@ final class FriendOverlapViewModel {
         } catch {
             errorMessage = "Couldn't load schedules."
         }
+        // Fails soft: offline keeps the last count instead of erasing the badge.
+        if let incoming = try? await services.friends.incomingRequests() {
+            pendingRequestCount = incoming.count
+        }
         // Keep the selection if that friend is still there; otherwise pick the first.
         if let focus, friends.contains(where: { $0.id == focus }) {
             selectedFriendID = focus
@@ -125,6 +131,18 @@ final class FriendOverlapViewModel {
         } catch {
             errorMessage = "Couldn't post your invite."
             return false
+        }
+    }
+
+    /// Removes a friendship (both sides). The friends listener drops them from the row; until it
+    /// reports, the list is reloaded so the row reflects what the repository now says.
+    func unfriend(_ friend: FriendProfile, services: AppServices) async {
+        do {
+            try await services.friends.unfriend(FriendSummary(id: friend.id, displayName: friend.displayName, handle: ""))
+            friends.removeAll { $0.id == friend.id }
+            if selectedFriendID == friend.id { selectedFriendID = friends.first?.id }
+        } catch {
+            errorMessage = "Couldn't remove \(friend.displayName). Check your connection and try again."
         }
     }
 

@@ -36,20 +36,15 @@ struct AccountView: View {
                     Button("Save") {
                         Task { await auth.updateDetails(major: major, classYear: classYear) }
                     }
+                    // Navy in light mode; the same token turns near-white in dark mode, where navy
+                    // text would vanish against the dark row.
+                    .foregroundStyle(Theme.textPrimary)
                     .disabled(auth.isBusy)
                     .minTapTarget()
                 } header: {
                     Text("Profile")
                 } footer: {
                     Text("Shown in your header, like CS '28. Friends can see them. Both are optional.")
-                }
-                Section {
-                    NavigationLink {
-                        FriendsView()
-                    } label: {
-                        Label("Friends", systemImage: "person.2.fill")
-                    }
-                    .minTapTarget()
                 }
                 Section {
                     Toggle("Share my class times with friends", isOn: Binding(
