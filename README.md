@@ -1,6 +1,6 @@
 # CampusSync
 
-CampusSync is a native iOS app for UNC Chapel Hill students. It shows when you and your friends are free, what is happening on campus, and puts the answer on your Home Screen and Lock Screen. It was built for HackNC by a team of two.
+CampusSync is a native iOS app for UNC Chapel Hill students. It shows when you and your friends are free, what is happening on campus, and puts the answer on your Home Screen and Lock Screen. It was built for HackNC by a team of two: Tri Nguyen and Justin Nguyen.
 
 Students sign in with a verified `@unc.edu` email, import their class schedule, add friends by handle, and see who is free right now. They can post plans to friends, join clubs and see which club events fit their timetable, all kept in sync between phones.
 
@@ -129,7 +129,7 @@ Built for HackNC. Accounts, friends, shared schedules, invites, clubs, widgets a
 
 This project was built with substantial help from an AI coding assistant, and we want to be clear about what that means.
 
-**Tool.** [Claude Code](https://claude.com/claude-code), Anthropic's command-line coding agent, using Claude models. It was used by the team throughout development, as shown by the `Co-Authored-By: Claude` trailer on the commits it helped write (`git log` shows them).
+**Tool.** [Claude Code](https://claude.com/claude-code), Anthropic's command-line coding agent, using Claude models. It was used by Tri and Justin throughout development, as shown by the `Co-Authored-By: Claude` trailer on the commits it helped write (`git log` shows them).
 
 **What Claude did.**
 - Wrote and edited much of the Swift app code, the widget, the Firestore security rules, the seeding scripts and the tests, working one phase at a time from the spec.
@@ -148,4 +148,4 @@ This project was built with substantial help from an AI coding assistant, and we
 
 ## Credits
 
-Built by the CampusSync team for HackNC, with development assistance from [Claude](https://claude.com/claude-code) (Anthropic's Claude Code).
+Built by Tri Nguyen and Justin Nguyen for HackNC, with development assistance from [Claude](https://claude.com/claude-code) (Anthropic's Claude Code).
