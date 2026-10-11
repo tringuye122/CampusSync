@@ -24,6 +24,10 @@ nonisolated struct WidgetEntryData: Equatable {
     var offset: TimeInterval
     var status: ScheduleStatus
     var topInvite: SnapshotInvite?
+    /// Friends free or in class at `virtualNow` (medium and large sizes).
+    var friends: [WidgetFriendRow] = []
+    var userHandle: String? = nil
+    var userName: String? = nil
 
     /// Converts a virtual time (e.g. when the next class starts) to real time, for
     /// countdowns that WidgetKit renders against the real clock.
@@ -31,7 +35,7 @@ nonisolated struct WidgetEntryData: Equatable {
         virtual.addingTimeInterval(-offset)
     }
 
-    var isEmpty: Bool { status == .noClasses && topInvite == nil }
+    var isEmpty: Bool { status == .noClasses && topInvite == nil && friends.isEmpty }
 }
 
 nonisolated struct WidgetTimelinePlan: Equatable {
@@ -64,6 +68,13 @@ nonisolated enum WidgetTimelineBuilder {
                 boundaries.insert(day.addingTimeInterval(TimeInterval(meeting.startMinutes * 60)))
                 boundaries.insert(day.addingTimeInterval(TimeInterval(meeting.endMinutes * 60)))
             }
+            // A friend's class starting or ending flips them between free and in class.
+            for friend in snapshot.friends {
+                for block in friend.blocks where block.weekday == weekday {
+                    boundaries.insert(day.addingTimeInterval(TimeInterval(block.startMinutes * 60)))
+                    boundaries.insert(day.addingTimeInterval(TimeInterval(block.endMinutes * 60)))
+                }
+            }
         }
         for invite in snapshot.invites {
             boundaries.insert(invite.startTime)
@@ -81,7 +92,10 @@ nonisolated enum WidgetTimelineBuilder {
                 virtualNow: instant,
                 offset: offset,
                 status: ScheduleStatusEngine.status(at: instant, meetings: snapshot.meetings, calendar: calendar),
-                topInvite: topInvite(in: snapshot.invites, at: instant)
+                topInvite: topInvite(in: snapshot.invites, at: instant),
+                friends: WidgetFriendStatusEngine.rows(at: instant, friends: snapshot.friends, calendar: calendar),
+                userHandle: snapshot.userHandle,
+                userName: snapshot.userName
             )
         }
 

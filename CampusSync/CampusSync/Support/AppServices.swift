@@ -69,11 +69,15 @@ final class AppServices {
         let now = clock.now
         // No cached student means signed out: write an empty snapshot so the previous student's
         // classes and invites never linger on the Home Screen or Lock Screen.
-        let signedIn = (try? await users.currentUser()) != nil
+        let user = try? await users.currentUser()
+        let signedIn = user != nil
         let classes = signedIn ? ((try? await schedule.classes()) ?? []) : []
         let active = signedIn ? ((try? await invites.activeInvites(now: now)) ?? []) : []
+        let friendProfiles = signedIn ? ((try? await schedule.friends()) ?? []) : []
         let snapshot = SnapshotBuilder.make(
-            classes: classes, invites: active, now: now, clockOffset: clock.offset)
+            classes: classes, invites: active, friends: friendProfiles,
+            userHandle: user?.handle, userName: user?.displayName,
+            now: now, clockOffset: clock.offset)
         if snapshot.save() {
             WidgetCenter.shared.reloadAllTimelines()
         }

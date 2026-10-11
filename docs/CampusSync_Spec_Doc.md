@@ -209,8 +209,9 @@ Support dark mode from the start by using asset-catalog colors instead of hard-c
 
 **Widget (`ScheduleWidget.swift`)**
 
-- Families: `systemSmall`, `systemMedium` for the Home Screen, and `accessoryRectangular`, `accessoryCircular`, `accessoryInline` for the Lock Screen. The original two families alone do not cover the Lock Screen.
-- Small: next class or free block with a countdown. Medium: that block plus the top friend invite with landmark and time.
+- Families: `systemSmall`, `systemMedium`, `systemLarge` for the Home Screen, and `accessoryRectangular`, `accessoryCircular`, `accessoryInline` for the Lock Screen. The original two families alone do not cover the Lock Screen.
+- Small: avatar and @handle, then "UP NEXT" (or "NOW" in class) with the course and time. Medium: that block with the time range and room, plus the friend who has been free longest ("Alex is Free, Until 5:00 PM"). Large: "Friends' Status", up to four friends with a bar for the next six hours (light = free, navy = class), the time range, and a Free or In Class pill. The widget never compares schedules with the user's, so there is no mutual state. Home Screen widgets use Carolina Blue with white text; invites show only on the Lock Screen rectangular widget. Tapping any widget opens the Home tab (`campussync://home`).
+- Friends' meeting times (no titles) ride in the snapshot (`friends`, additive), so the widget works out who is free at each timeline boundary without the app running.
 - The `TimelineProvider` builds several entries ahead of time, one at each boundary (a class starting, a class ending, an invite expiring), and sets a reload policy for the next boundary. It cannot update continuously.
 - The app calls `reloadAllTimelines()` after any local write (new invite, RSVP, import). Tapping the widget deep-links to the relevant tab.
 

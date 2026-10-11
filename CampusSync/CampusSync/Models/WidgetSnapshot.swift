@@ -25,6 +25,11 @@ nonisolated struct WidgetSnapshot: Codable, Equatable {
     var meetings: [SnapshotMeeting]
     /// Active invites (up to 5), soonest first.
     var invites: [SnapshotInvite]
+    /// Additive (widget redesign): the signed-in student's @handle and name for the widget header.
+    var userHandle: String? = nil
+    var userName: String? = nil
+    /// Additive: friends' shared meeting times (never titles), so the widget can say who is free.
+    var friends: [SnapshotFriend] = []
 
     static let empty = WidgetSnapshot(
         version: currentVersion,
@@ -45,6 +50,20 @@ nonisolated struct SnapshotMeeting: Codable, Equatable {
     var endMinutes: Int
 }
 
+/// A weekly busy block with no course details, for friends (their schedules share times only).
+nonisolated struct SnapshotBlock: Codable, Equatable {
+    /// Calendar weekday number, Monday = 2 ... Friday = 6.
+    var weekday: Int
+    var startMinutes: Int
+    var endMinutes: Int
+}
+
+nonisolated struct SnapshotFriend: Codable, Equatable {
+    var id: String
+    var name: String
+    var blocks: [SnapshotBlock]
+}
+
 nonisolated struct SnapshotInvite: Codable, Equatable {
     var id: String
     var title: String
@@ -55,6 +74,21 @@ nonisolated struct SnapshotInvite: Codable, Equatable {
 }
 
 // MARK: - Encoding
+
+/// Snapshots written before the widget redesign have no user or friends keys; they still decode.
+nonisolated extension WidgetSnapshot {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        generatedAt = try container.decode(Date.self, forKey: .generatedAt)
+        clockOffset = try container.decode(TimeInterval.self, forKey: .clockOffset)
+        meetings = try container.decode([SnapshotMeeting].self, forKey: .meetings)
+        invites = try container.decode([SnapshotInvite].self, forKey: .invites)
+        userHandle = try container.decodeIfPresent(String.self, forKey: .userHandle)
+        userName = try container.decodeIfPresent(String.self, forKey: .userName)
+        friends = try container.decodeIfPresent([SnapshotFriend].self, forKey: .friends) ?? []
+    }
+}
 
 nonisolated extension WidgetSnapshot {
     private static var encoder: JSONEncoder {

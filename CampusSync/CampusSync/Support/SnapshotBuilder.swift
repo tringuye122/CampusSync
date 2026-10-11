@@ -15,6 +15,9 @@ enum SnapshotBuilder {
     static func make(
         classes: [ClassSchedule],
         invites: [OpenInvite],
+        friends: [FriendProfile] = [],
+        userHandle: String? = nil,
+        userName: String? = nil,
         now: Date,
         clockOffset: TimeInterval
     ) -> WidgetSnapshot {
@@ -38,7 +41,20 @@ enum SnapshotBuilder {
             generatedAt: now,
             clockOffset: clockOffset,
             meetings: classes.flatMap(\.snapshotMeetings),
-            invites: Array(activeInvites)
+            invites: Array(activeInvites),
+            userHandle: userHandle,
+            userName: userName,
+            // Times only: a friend's schedule never carries titles, and neither does the snapshot.
+            friends: friends.map { friend in
+                SnapshotFriend(
+                    id: friend.id,
+                    name: friend.displayName,
+                    blocks: friend.classes.flatMap { meeting in
+                        meeting.weekdays.map {
+                            SnapshotBlock(weekday: $0.rawValue, startMinutes: meeting.startMinutes, endMinutes: meeting.endMinutes)
+                        }
+                    })
+            }
         )
     }
 }

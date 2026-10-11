@@ -137,6 +137,9 @@ struct WidgetTests {
         #expect(router.selectedTab == .invites)
         router.open(URL(string: "campussync://schedule")!)
         #expect(router.selectedTab == .schedule)
+        router.open(URL(string: "campussync://home")!)   // every widget links here
+        #expect(router.selectedTab == .home)
+        router.open(URL(string: "campussync://schedule")!)
         router.open(URL(string: "https://example.com/clubs")!)
         router.open(URL(string: "campussync://nonsense")!)
         #expect(router.selectedTab == .schedule)

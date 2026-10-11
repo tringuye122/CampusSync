@@ -81,6 +81,7 @@
 				Support/ScheduleStatus.swift,
 				Support/Theme.swift,
 				Support/TimeFormatting.swift,
+				Support/WidgetFriendStatus.swift,
 				Support/WidgetTimelineBuilder.swift,
 			);
 			target = F43529E7307A8FF300E76BB5 /* ScheduleWidgetExtension */;
