@@ -14,11 +14,12 @@ import WidgetKit
 
 @Observable
 final class AppServices {
-    let users: UserRepository
-    let schedule: ScheduleRepository
-    let invites: InviteRepository
+    // Users, schedule, invites and friends are swapped for demo data in demo mode; clubs stay live.
+    private(set) var users: UserRepository
+    private(set) var schedule: ScheduleRepository
+    private(set) var invites: InviteRepository
     let clubs: ClubRepository
-    let friends: FriendRepository
+    private(set) var friends: FriendRepository
     /// Firestore listeners that keep the local cache current. Idle until `start(account:)`.
     let sync: SyncCoordinator
     /// Bumped after every local write (import, post, RSVP, join), so shared UI like the header
@@ -30,6 +31,22 @@ final class AppServices {
     private let retainedContainer: ModelContainer?
     /// The clock the widget snapshot's `clockOffset` is read from.
     let clock: AppClock
+
+    // MARK: Demo mode
+    private let liveRepositories: (users: UserRepository, schedule: ScheduleRepository, invites: InviteRepository, friends: FriendRepository)
+    private let ratings: ProfessorRatingProvider
+    private var demoWorld: DemoWorld?
+    /// Demo worlds that have been left, kept alive on purpose. Screens still on display hold demo
+    /// models for a moment after the switch, and reading a SwiftData model whose database has been
+    /// freed is a fatal error. Only the last few are kept, and the UI has long since rebuilt by then.
+    private(set) var retiredDemoWorldCount = 0
+    private var retiredDemoWorlds: [DemoWorld] = []
+    private(set) var isDemoMode = false
+    /// Bumped on every switch between live and demo, so the UI rebuilds and reloads from the new data.
+    private(set) var demoGeneration = 0
+    private static let demoModeKey = "CampusSync.demoMode"
+    /// Whether the last session ended in demo mode (restored after sign-in).
+    static var wantsDemoMode: Bool { UserDefaults.standard.bool(forKey: demoModeKey) }
 
     init(
         context: ModelContext,
@@ -45,21 +62,72 @@ final class AppServices {
         let localSchedule = LocalScheduleRepository(context: context, ratings: ratings)
         let localInvites = LocalInviteRepository(context: context)
         let localClubs = LocalClubRepository(context: context)
-        users = localUsers
+        let scheduleRepository: ScheduleRepository
+        let inviteRepository: InviteRepository
         if useFirestore {
             // Reads stay on the cache; writes also go to Firestore (see FirestoreRepositories.swift).
-            schedule = FirestoreScheduleRepository(local: localSchedule)
-            invites = FirestoreInviteRepository(local: localInvites, users: localUsers)
+            scheduleRepository = FirestoreScheduleRepository(local: localSchedule)
+            inviteRepository = FirestoreInviteRepository(local: localInvites, users: localUsers)
             clubs = FirestoreClubRepository(local: localClubs, users: localUsers)
         } else {
-            schedule = localSchedule
-            invites = localInvites
+            scheduleRepository = localSchedule
+            inviteRepository = localInvites
             clubs = localClubs
         }
+        users = localUsers
+        schedule = scheduleRepository
+        invites = inviteRepository
         store = LocalDataStore(context: context)
         sync = SyncCoordinator(context: context)
         self.friends = friends
+        self.ratings = ratings
+        liveRepositories = (localUsers, scheduleRepository, inviteRepository, friends)
         sync.onChange = { [weak self] in await self?.syncWidget() }
+    }
+
+    /// Live to demo: swaps in the demo friends, schedule and invites, sets the clock to the demo
+    /// moment (Tue Oct 13, 12:30 PM) and rewrites the widget. Nothing is written to Firestore.
+    func enterDemoMode(account: UserAccount?) async {
+        guard !isDemoMode else { return }
+        let world: DemoWorld
+        do {
+            world = try DemoWorld(account: account, liveUsers: liveRepositories.users, ratings: ratings)
+        } catch {
+            print("Could not build the demo data: \(error)")
+            return
+        }
+        demoWorld = world
+        users = world.users
+        schedule = world.schedule
+        invites = world.invites
+        friends = world.friends
+        clock.setOverride(to: DemoWorld.moment())
+        isDemoMode = true
+        UserDefaults.standard.set(true, forKey: Self.demoModeKey)
+        demoGeneration += 1
+        await syncWidget()
+    }
+
+    /// Demo to live: stops using the demo data, clears the clock override, and refreshes from
+    /// Firestore. The demo world is retired, not freed (see `retiredDemoWorlds`).
+    func exitDemoMode() async {
+        UserDefaults.standard.set(false, forKey: Self.demoModeKey)
+        guard isDemoMode else { return }
+        (users, schedule, invites, friends) = liveRepositories
+        if let world = demoWorld {
+            retiredDemoWorlds.append(world)
+            if retiredDemoWorlds.count > 3 { retiredDemoWorlds.removeFirst() }
+            retiredDemoWorldCount = retiredDemoWorlds.count
+        }
+        demoWorld = nil
+        clock.clearOverride()
+        isDemoMode = false
+        demoGeneration += 1
+        await syncWidget()
+        // Let the rebuilt screens settle before the refresh rewrites cached friends and events
+        // under them.
+        try? await Task.sleep(for: .milliseconds(600))
+        await sync.refreshAll()
     }
 
     /// Rewrites the widget snapshot from current local data and reloads widget timelines.

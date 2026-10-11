@@ -86,20 +86,27 @@ struct CampusSyncApp: App {
     var body: some Scene {
         WindowGroup {
             AuthGateView {
-                MainTabView()
+                // Rebuilt whenever demo mode flips, so every screen reloads from the new data.
+                MainTabView().id(services.demoGeneration)
             }
             .environment(clock)
             .environment(services)
             .environment(router)
             .environment(auth)
             .onOpenURL { router.open($0) }
+            .onChange(of: services.demoGeneration) { router.selectedTab = .home }
             .task { await auth.refresh() }
             // Start Firestore sync once a verified student with a handle is signed in; stop
             // and wipe the cache on sign-out. The app still launches and works with no connection.
             .onChange(of: auth.account, initial: true) { _, account in
                 if let account {
                     services.sync.start(account: account)
+                    // Demo mode is remembered across launches, so a relaunch stays on the demo.
+                    if AppServices.wantsDemoMode, !services.isDemoMode {
+                        Task { await services.enterDemoMode(account: account) }
+                    }
                 } else if case .signedOut = auth.state {
+                    Task { await services.exitDemoMode() }
                     // Only on an explicit sign-out. While auth is still loading at launch the
                     // account is nil too, and the offline cache must survive that.
                     services.sync.stop(wipeCache: true)

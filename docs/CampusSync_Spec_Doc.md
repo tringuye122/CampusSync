@@ -250,7 +250,7 @@ This schedule produces useful gaps for the demo: Tuesdays and Thursdays have a 3
 
 **Demo safety net**
 
-- A hidden developer menu (triple-tap the profile avatar) with a time override, so the demo can run "as if it is Tuesday at 12:30 PM" regardless of the real clock.
+- A **Demo mode** toggle in Account: swaps in a local demo world (cast, schedule, invites) and sets the clock to Tuesday Oct 13 at 12:30 PM, so the demo runs the same regardless of the real day. Turning it off deletes the demo data and returns to live. Sign-in, clubs and Join / Pay Dues stay live.
 - A reset-demo-data action and a seeding script that recreate the clubs, events and invites with fresh times.
 - Local fallback: the SwiftData repositories and seed data still work with no connection, so a network failure degrades the app instead of breaking it.
 - A pre-recorded screen capture of the full flow, in case the device or Wi-Fi fails.

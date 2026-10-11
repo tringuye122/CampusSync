@@ -132,3 +132,22 @@ struct HomeDashboardView: View {
         .environment(auth)
         .task { await auth.refresh() }
 }
+
+#Preview("Demo mode") {
+    // Demo mode on: the cast, the Tuesday 12:30 PM clock and the Demo pill in the header.
+    let clock = AppClock()
+    let services = AppServices.preview(now: DemoWorld.moment())
+    let backend = MockAuthBackend(signedInEmail: "justin@unc.edu")
+    backend.seed(email: "justin@unc.edu", password: "password1", displayName: "Justin Nguyen", handle: "justin")
+    let auth = AuthService(backend: backend, defaults: UserDefaults(suiteName: "preview-home-demo")!)
+    return HomeDashboardView()
+        .environment(services)
+        .environment(clock)
+        .environment(AppRouter())
+        .environment(auth)
+        .task {
+            await auth.refresh()
+            await services.enterDemoMode(account: auth.account)
+            clock.setOverride(to: DemoWorld.moment())
+        }
+}

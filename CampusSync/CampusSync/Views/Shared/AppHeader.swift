@@ -53,19 +53,52 @@ struct AppHeader: View {
         auth.account.map { "@\($0.handle)" } ?? "@you"
     }
 
-    /// "CS '28", with the Verified Member pill in front when earned.
+    /// "CS '28", with the Verified Member pill (when earned) and the Demo pill (in demo mode) in front.
     private var detailLine: some View {
         let parts = [auth.account?.affiliation].compactMap { $0 }
         return ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
+                modePill
                 if model.isVerifiedMember { verifiedPill }
                 if !parts.isEmpty { detailText(parts) }
             }
             VStack(alignment: .leading, spacing: 6) {
+                modePill
                 if model.isVerifiedMember { verifiedPill }
                 if !parts.isEmpty { detailText(parts) }
             }
         }
+    }
+
+    /// Always one of the two, so which data you are looking at is never in doubt.
+    @ViewBuilder private var modePill: some View {
+        if services.isDemoMode { demoPill } else { livePill }
+    }
+
+    /// Real Firebase data. Green symbol on the neutral pill fill so the text keeps its contrast.
+    private var livePill: some View {
+        Label {
+            Text("Live")
+        } icon: {
+            Image(systemName: "dot.radiowaves.left.and.right")
+                .foregroundStyle(Theme.success)
+        }
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(Theme.textPrimary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Theme.pillBackground, in: Capsule())
+        .accessibilityLabel("Live data")
+    }
+
+    /// Shown whenever demo data is on, so it is never mistaken for live data.
+    private var demoPill: some View {
+        Label("Demo mode", systemImage: "play.rectangle.fill")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Theme.cautionText)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Theme.cautionSurface, in: Capsule())
     }
 
     private var verifiedPill: some View {

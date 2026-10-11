@@ -55,10 +55,26 @@ struct AccountView: View {
                             Task { try? await services.schedule.setSharesScheduleWithFriends(shares) }
                         }))
                     .tint(Theme.success)
+                        .disabled(services.isDemoMode)   // demo data is never shared
                         .minTapTarget()
                         .onAppear { sharesSchedule = services.schedule.sharesScheduleWithFriends }
                 } footer: {
                     Text("Friends see when you have class and where, never course names or instructors. Turn this off to remove your times from the server.")
+                }
+                Section {
+                    Toggle("Demo mode", isOn: Binding(
+                        get: { services.isDemoMode },
+                        set: { on in
+                            Task {
+                                if on { await services.enterDemoMode(account: auth.account) } else { await services.exitDemoMode() }
+                            }
+                        }))
+                        .tint(Theme.success)
+                        .minTapTarget()
+                } header: {
+                    Text("Demo")
+                } footer: {
+                    Text("Swaps in demo friends, schedules and invites and sets the clock to Tue, Oct 13, 12:30 PM. Your account, sign-in and clubs stay live. Turn it off to delete the demo data and go back to live.")
                 }
                 Section {
                     Button("Sign out", role: .destructive) {

@@ -5,6 +5,11 @@
 //   npm run seed -- clubs                         # into the LOCAL emulator (start it first)
 //   npm run seed -- invites --host <uid> --host-name "Pat Example" --to <uid>,<uid>
 //   npm run seed -- clubs --real                  # into the REAL project (see below)
+//   npm run seed -- demo --as-of 2026-10-13T12:30 --friend-with you@unc.edu[,other@unc.edu]
+//                                                 # the demo cast: accounts, friends, schedules,
+//                                                 # invites, clubs, all timed from --as-of
+//   npm run seed -- reset-demo                    # remove the demo cast again
+//   npm run seed -- verify --email you@unc.edu    # mark an account's email verified (fallback)
 //
 // Safety: with no flag this refuses to run unless FIRESTORE_EMULATOR_HOST is set, so it can
 // never touch the real project by accident. `--real` writes to campussync-780a5 using
@@ -17,6 +22,9 @@
 
 import { initializeApp, applicationDefault } from 'firebase-admin/app'
 import { Timestamp, getFirestore } from 'firebase-admin/firestore'
+import { getAuth } from 'firebase-admin/auth'
+import { randomBytes } from 'node:crypto'
+import { buildDemoPlan, cast, emailFor, parseAsOf } from './demo-data.mjs'
 
 const PROJECT_ID = 'campussync-780a5'
 
@@ -28,10 +36,13 @@ const flag = (name) => {
 }
 const real = args.includes('--real')
 
-if (!['clubs', 'invites'].includes(command)) {
-  console.error('Usage: seed.mjs clubs | invites --host <uid> --host-name <name> --to <uid,uid> [--real]')
+const commands = ['clubs', 'invites', 'demo', 'reset-demo', 'verify']
+if (!commands.includes(command)) {
+  console.error('Usage: seed.mjs clubs | invites --host <uid> --host-name <name> --to <uid,uid> | demo --as-of <time> --friend-with <emails> | reset-demo | verify --email <email> [--real]')
   process.exit(1)
 }
+// Commands that touch accounts also need the Auth emulator when not writing to the real project.
+const touchesAuth = ['demo', 'reset-demo', 'verify'].includes(command)
 
 if (real) {
   if (process.env.FIRESTORE_EMULATOR_HOST) {
@@ -47,12 +58,19 @@ if (real) {
     console.error('Or pass --real to deliberately write to the real project.')
     process.exit(1)
   }
+  if (touchesAuth && !process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+    console.error('Refusing to run: FIREBASE_AUTH_EMULATOR_HOST is not set, so account changes would hit the real project.')
+    console.error('Run: FIRESTORE_EMULATOR_HOST=localhost:8080 FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 npm run seed -- ' + command)
+    process.exit(1)
+  }
   initializeApp({ projectId: PROJECT_ID })
   console.log(`Writing to the emulator at ${process.env.FIRESTORE_EMULATOR_HOST}`)
 }
 
 const db = getFirestore()
-const now = Date.now()
+// Content is timed from --as-of (the demo moment) when given, else from the moment you run this.
+const asOf = parseAsOf(flag('as-of'))
+const now = asOf.getTime()
 const hours = (h) => Timestamp.fromMillis(now + h * 3600 * 1000)
 
 // Same ids as SampleData.swift, so the local seed and Firestore line up.
@@ -127,5 +145,97 @@ async function seedInvites() {
   console.log(`Seeded ${plans.length} invites from ${hostName} to ${to.length} friend(s).`)
 }
 
+// MARK: Demo cast
+
+const auth = getAuth()
+
+/** A random password, shown once. The demo accounts hold friend access to the real accounts. */
+const password = flag('password') ?? process.env.DEMO_PASSWORD ?? randomBytes(12).toString('base64url')
+
+async function realUsersFromEmails() {
+  const emails = (flag('friend-with') ?? '').split(',').map((e) => e.trim()).filter(Boolean)
+  if (emails.length === 0) {
+    console.error('demo needs --friend-with <email[,email]>: the real, signed-up account(s) the demo friends befriend.')
+    process.exit(1)
+  }
+  const users = []
+  for (const email of emails) {
+    const user = await auth.getUserByEmail(email).catch(() => null)
+    if (!user) { console.error(`No account for ${email}. Sign up in the app first.`); process.exit(1) }
+    const profile = await db.collection('users').doc(user.uid).get()
+    if (!profile.exists) { console.error(`${email} has no profile yet. Finish sign-up in the app first.`); process.exit(1) }
+    users.push({ uid: user.uid, name: profile.data().displayName })
+  }
+  return users
+}
+
+async function ensureAccount(person) {
+  const email = emailFor(person)
+  const existing = await auth.getUser(person.uid).catch(() => null)
+  if (existing) {
+    await auth.updateUser(person.uid, { password, emailVerified: true, displayName: person.name })
+  } else {
+    await auth.createUser({ uid: person.uid, email, password, emailVerified: true, displayName: person.name })
+  }
+}
+
+async function seedDemo() {
+  const realUsers = await realUsersFromEmails()
+  // Never take over a handle that belongs to someone else.
+  for (const person of cast) {
+    const claim = await db.collection('handles').doc(person.handle).get()
+    if (claim.exists && claim.data().uid !== person.uid) {
+      console.error(`Handle ${person.handle} already belongs to another account. Aborting.`)
+      process.exit(1)
+    }
+  }
+  for (const person of cast) await ensureAccount(person)
+
+  const plan = buildDemoPlan({ asOf, realUsers })
+  const batch = db.batch()
+  for (const [path, data] of Object.entries(plan)) batch.set(db.doc(path), data)
+  await batch.commit()
+  await seedClubs()
+
+  console.log(`Demo cast ready as of ${asOf.toString()} (friends with ${realUsers.map((u) => u.name).join(', ')}).`)
+  console.log(`Demo account password (shown once): ${password}`)
+  console.log('Remove them after the demo with: npm run seed -- reset-demo')
+}
+
+async function resetDemo() {
+  let removed = 0
+  for (const person of cast) {
+    const friends = await db.collection('users').doc(person.uid).collection('friends').get()
+    for (const friend of friends.docs) {
+      await db.collection('users').doc(friend.id).collection('friends').doc(person.uid).delete()
+      await friend.ref.delete()
+    }
+    for (const field of ['fromUID', 'toUID']) {
+      const requests = await db.collection('friendRequests').where(field, '==', person.uid).get()
+      for (const request of requests.docs) await request.ref.delete()
+    }
+    const meetings = await db.collection('schedules').doc(person.uid).collection('meetings').get()
+    for (const meeting of meetings.docs) await meeting.ref.delete()
+    const invites = await db.collection('invites').where('hostID', '==', person.uid).get()
+    for (const invite of invites.docs) await invite.ref.delete()
+    await db.collection('handles').doc(person.handle).delete()
+    await db.collection('users').doc(person.uid).delete()
+    await auth.deleteUser(person.uid).catch(() => {})
+    removed += 1
+  }
+  console.log(`Removed ${removed} demo accounts and their data. Clubs were left in place.`)
+}
+
+async function verifyEmail() {
+  const email = flag('email')
+  if (!email) { console.error('verify needs --email <email>'); process.exit(1) }
+  const user = await auth.getUserByEmail(email)
+  await auth.updateUser(user.uid, { emailVerified: true })
+  console.log(`Marked ${email} as verified. In the app, tap "I've verified".`)
+}
+
 if (command === 'clubs') await seedClubs()
-else await seedInvites()
+else if (command === 'invites') await seedInvites()
+else if (command === 'demo') await seedDemo()
+else if (command === 'reset-demo') await resetDemo()
+else await verifyEmail()
