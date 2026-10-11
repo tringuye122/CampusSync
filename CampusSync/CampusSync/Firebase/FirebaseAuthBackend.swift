@@ -133,7 +133,8 @@ final class FirebaseAuthBackend: AuthBackend {
         ], forDocument: userRef)
 
         do {
-            try await batch.commit()
+            // Offline the commit never returns; give up with a connection error instead of spinning.
+            try await withTimeout(onTimeout: { AuthError.network }) { try await batch.commit() }
         } catch {
             // Someone may have claimed it between our check and the commit.
             if (try? await isHandleAvailable(handle)) == false { throw AuthError.handleTaken }

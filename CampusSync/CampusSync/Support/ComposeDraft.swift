@@ -37,8 +37,16 @@ struct ComposeDraft: Equatable {
         return trimmed.isEmpty ? "\(category.displayName) at \(landmark.displayName)" : trimmed
     }
 
-    /// The invite needs at least one recipient.
-    var canPost: Bool { !recipientIDs.isEmpty }
+    /// The limits the Firestore rules enforce on an invite (an invite that breaks them is rejected
+    /// by the server after it already showed up locally).
+    static let maxTitleLength = 80
+    static let maxRecipients = 30
+
+    /// The invite needs at least one recipient, and must fit the rules' limits.
+    var canPost: Bool {
+        !recipientIDs.isEmpty && recipientIDs.count <= Self.maxRecipients
+            && resolvedTitle.unicodeScalars.count <= Self.maxTitleLength
+    }
 
     /// `expiresAt` is an absolute date: start plus duration. The poster attends automatically.
     func makeInvite(hostID: String, hostName: String) -> OpenInvite {

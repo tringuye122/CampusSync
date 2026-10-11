@@ -65,13 +65,14 @@ final class AppServices {
         let localSchedule = LocalScheduleRepository(context: context, ratings: ratings)
         let localInvites = LocalInviteRepository(context: context)
         let localClubs = LocalClubRepository(context: context)
+        let coordinator = SyncCoordinator(context: context)   // the club repository refreshes events through it
         let scheduleRepository: ScheduleRepository
         let inviteRepository: InviteRepository
         if useFirestore {
             // Reads stay on the cache; writes also go to Firestore (see FirestoreRepositories.swift).
             scheduleRepository = FirestoreScheduleRepository(local: localSchedule)
             inviteRepository = FirestoreInviteRepository(local: localInvites, users: localUsers)
-            clubs = FirestoreClubRepository(local: localClubs, users: localUsers)
+            clubs = FirestoreClubRepository(local: localClubs, users: localUsers, sync: coordinator)
         } else {
             scheduleRepository = localSchedule
             inviteRepository = localInvites
@@ -81,7 +82,7 @@ final class AppServices {
         schedule = scheduleRepository
         invites = inviteRepository
         store = LocalDataStore(context: context)
-        sync = SyncCoordinator(context: context)
+        sync = coordinator
         self.friends = friends
         self.ratings = ratings
         liveRepositories = (localUsers, scheduleRepository, inviteRepository, friends)
@@ -89,7 +90,9 @@ final class AppServices {
     }
 
     /// Live to demo: swaps in the demo friends, schedule and invites, sets the clock to the demo
-    /// moment (Tue Oct 13, 12:30 PM) and rewrites the widget. Nothing is written to Firestore.
+    /// moment (Tue Oct 13, 12:30 PM) and rewrites the widget. Nothing of the demo data is written to
+    /// Firestore. Clubs stay live, so joining or leaving a club in demo mode is a real change; posting
+    /// a club event is blocked in demo mode (see ClubsViewModel.canPostEvents).
     func enterDemoMode(account: UserAccount?) async {
         guard !isDemoMode, !isSwitchingDemo else { return }
         isSwitchingDemo = true

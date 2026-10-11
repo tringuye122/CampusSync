@@ -12,6 +12,8 @@ struct AccountView: View {
     @Environment(AppServices.self) private var services
     @Environment(\.dismiss) private var dismiss
     @State private var sharesSchedule = true
+    @State private var isUpdatingSharing = false
+    @State private var sharingMessage: String?
     @State private var major = ""
     @State private var classYear = ""
 
@@ -51,15 +53,34 @@ struct AccountView: View {
                         get: { sharesSchedule },
                         set: { shares in
                             sharesSchedule = shares
+                            sharingMessage = nil
+                            isUpdatingSharing = true
                             // Publishes the meeting times, or removes them all when switched off.
-                            Task { try? await services.schedule.setSharesScheduleWithFriends(shares) }
+                            Task {
+                                defer { isUpdatingSharing = false }
+                                do {
+                                    try await services.schedule.setSharesScheduleWithFriends(shares)
+                                } catch ScheduleSharingError.notConfirmed {
+                                    sharingMessage = shares
+                                        ? "Saved. Friends will see your times once you are back online."
+                                        : "Saved, but the server has not confirmed it yet. Friends can still see your times until you are back online."
+                                } catch {
+                                    sharesSchedule = services.schedule.sharesScheduleWithFriends   // what is really stored
+                                    sharingMessage = "Couldn't change sharing. Try again."
+                                }
+                            }
                         }))
                     .tint(Theme.success)
-                        .disabled(services.isDemoMode)   // demo data is never shared
+                        .disabled(services.isDemoMode || isUpdatingSharing)   // demo data is never shared; one change at a time
                         .minTapTarget()
                         .onAppear { sharesSchedule = services.schedule.sharesScheduleWithFriends }
                 } footer: {
-                    Text("Friends see when you have class and where, never course names or instructors. Turn this off to remove your times from the server.")
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Friends see when you have class and where, never course names or instructors. Turn this off to remove your times from the server.")
+                        if let sharingMessage {
+                            Text(sharingMessage).foregroundStyle(Theme.textPrimary).fontWeight(.semibold)
+                        }
+                    }
                 }
                 Section {
                     Toggle("Demo mode", isOn: Binding(

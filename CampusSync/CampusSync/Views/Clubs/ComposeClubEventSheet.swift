@@ -9,13 +9,16 @@ import SwiftUI
 
 struct ComposeClubEventSheet: View {
     let clubs: [Club]
-    let onPost: (ClubEventDraft) -> Void
+    /// Returns true when the event was posted. The sheet stays open (with the draft) until then.
+    let onPost: (ClubEventDraft) async -> Bool
 
     @State private var draft: ClubEventDraft
+    @State private var isPosting = false
+    @State private var postFailed = false
     @Environment(\.dismiss) private var dismiss
     @Environment(AppClock.self) private var clock
 
-    init(clubs: [Club], now: Date, onPost: @escaping (ClubEventDraft) -> Void) {
+    init(clubs: [Club], now: Date, onPost: @escaping (ClubEventDraft) async -> Bool) {
         self.clubs = clubs
         self.onPost = onPost
         // Prefilled: the first club, starting at the next whole hour.
@@ -28,6 +31,12 @@ struct ComposeClubEventSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                if postFailed {
+                    Section {
+                        Label("Couldn't post. Check your connection and try again.", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Theme.textPrimary)
+                    }
+                }
                 Section("Club") {
                     if clubs.isEmpty {
                         Text("Join a club first, then you can post its events.")
@@ -58,21 +67,31 @@ struct ComposeClubEventSheet: View {
             .navigationTitle("New club event")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(isPosting) }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Post") {
-                        onPost(draft)
-                        dismiss()
+                    if isPosting {
+                        ProgressView()
+                    } else {
+                        Button("Post") { Task { await submit() } }
+                            .fontWeight(.semibold)
+                            .disabled(!draft.isValid || clubs.isEmpty)
                     }
-                    .fontWeight(.semibold)
-                    .disabled(!draft.isValid || clubs.isEmpty)
                 }
             }
         }
     }
+
+    /// One post at a time; closes only once the post worked.
+    private func submit() async {
+        guard !isPosting else { return }
+        isPosting = true
+        postFailed = false
+        defer { isPosting = false }
+        if await onPost(draft) { dismiss() } else { postFailed = true }
+    }
 }
 
 #Preview {
-    ComposeClubEventSheet(clubs: SampleData.clubs(), now: AppClock().now, onPost: { _ in })
+    ComposeClubEventSheet(clubs: SampleData.clubs(), now: AppClock().now, onPost: { _ in true })
         .environment(AppClock())
 }

@@ -20,20 +20,10 @@ final class FirestoreFriendRepository: FriendRepository {
         return uid
     }
 
-    /// Firestore's async writes wait for the server and never finish while offline, which would
-    /// leave a screen spinning. Race the operation against a timeout and report it as offline.
-    /// (The write stays queued and goes through when the connection returns.)
+    /// A write that reports `.offline` instead of spinning when the server does not answer (see
+    /// `withTimeout`). The write stays queued and goes through when the connection returns.
     static func timed<T>(seconds: Double = 8, _ operation: @escaping () async throws -> T) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(for: .seconds(seconds))
-                throw FriendError.offline
-            }
-            defer { group.cancelAll() }
-            guard let first = try await group.next() else { throw FriendError.unknown }
-            return first
-        }
+        try await withTimeout(seconds: seconds, onTimeout: { FriendError.offline }, operation)
     }
 
     // MARK: Search

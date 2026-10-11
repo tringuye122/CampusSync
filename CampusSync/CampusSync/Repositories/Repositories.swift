@@ -35,6 +35,8 @@ protocol ScheduleRepository {
     /// Whether class times (never titles or instructors) are shared with friends. On by default.
     var sharesScheduleWithFriends: Bool { get }
     /// Turning it off removes the shared times from the server; turning it on publishes them.
+    /// Throws `ScheduleSharingError.notConfirmed` when the choice is saved on this phone but the
+    /// server has not confirmed it (offline): it applies when the connection returns.
     func setSharesScheduleWithFriends(_ shares: Bool) async throws
     /// RateMyProfessors rating for an instructor (cached; works offline once fetched).
     func professorRating(for instructor: String) async -> ProfessorRatingLookup
@@ -67,6 +69,10 @@ protocol ClubRepository {
     func deleteEvent(id: String) async throws
 }
 
+enum ScheduleSharingError: Error, Equatable {
+    case notConfirmed
+}
+
 /// What the Post sheet collects for a new club event.
 struct ClubEventDraft: Equatable {
     var clubID: String
@@ -81,7 +87,8 @@ struct ClubEventDraft: Equatable {
     var isValid: Bool {
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let place = location.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !clubID.isEmpty && (1...80).contains(name.count) && (1...60).contains(place.count)
-            && details.count <= 300 && durationMinutes > 0
+        // Counted in Unicode scalars, like the rules, so an emoji sequence cannot pass here and fail there.
+        return !clubID.isEmpty && (1...80).contains(name.unicodeScalars.count) && (1...60).contains(place.unicodeScalars.count)
+            && details.unicodeScalars.count <= 300 && durationMinutes > 0
     }
 }

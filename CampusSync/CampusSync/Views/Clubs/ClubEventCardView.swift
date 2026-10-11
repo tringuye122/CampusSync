@@ -10,6 +10,8 @@ import SwiftUI
 
 struct ClubEventCardView: View {
     let item: ClubsViewModel.Item
+    /// A membership change is in flight: the button is disabled until it finishes.
+    var isBusy = false
     /// Join / Pay Dues, or (when already a member) leave the club.
     let onAction: () -> Void
 
@@ -105,6 +107,7 @@ struct ClubEventCardView: View {
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.navy, lineWidth: 2))
             }
             .buttonStyle(.plain)
+            .disabled(isBusy)
             .accessibilityLabel(item.access == .duesRequired ? "Dues paid, you are a member" : "You joined this club")
             .accessibilityHint("Leaves the club")
         } else {
@@ -116,6 +119,7 @@ struct ClubEventCardView: View {
                     .background(Theme.carolinaBlue, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
             .buttonStyle(.plain)
+            .disabled(isBusy)
         }
     }
 

@@ -30,10 +30,10 @@ struct CampusSyncApp: App {
         let services = AppServices(
             context: container.mainContext, clock: clock, friends: FirestoreFriendRepository(),
             useFirestore: true)
-        // Seed only when the store is empty. Offline, no network involved.
-        try? services.store.seedIfNeeded(now: clock.now)
-        // Seed invites are timed relative to first launch, so refresh them if they have all expired.
-        try? services.store.refreshIfStale(now: clock.now)
+        // No sample data is seeded here. The cache holds only the signed-in student's own data
+        // (`AccountStore.adoptAccount` creates it at sign-in), so a signed-out launch has no
+        // fictional student for the widget to show or for sign-in to mistake for the user's data.
+        // Sample data is for previews and tests.
 
         self.container = container
         _auth = State(initialValue: AuthService(backend: FirebaseAuthBackend()))

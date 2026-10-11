@@ -299,13 +299,13 @@ struct DesignViewModelTests {
         #expect(viewModel.visibleItems(filter: .freeForMe).allSatisfy { $0.availability.isFree })
 
         let film = try #require(viewModel.visibleItems(filter: .all).first { $0.clubID == SampleData.aiClubID })
-        await viewModel.act(on: film, services: services)           // free club: Join
+        await viewModel.act(on: film, services: services, now: now)           // free club: Join
         await viewModel.load(services: services, now: now)
         #expect(viewModel.visibleItems(filter: .joined).map(\.clubID) == [SampleData.aiClubID])
 
         let robots = try #require(viewModel.visibleItems(filter: .all).first { $0.clubID == SampleData.robotsClubID })
         #expect(robots.access == .duesRequired)
-        await viewModel.act(on: robots, services: services)          // dues club: Pay Dues (also joins)
+        await viewModel.act(on: robots, services: services, now: now)          // dues club: Pay Dues (also joins)
         await viewModel.load(services: services, now: now)
         #expect(Set(viewModel.visibleItems(filter: .joined).map(\.clubID)) == [SampleData.aiClubID, SampleData.robotsClubID])
         #expect(try await services.users.currentUser().isVerifiedMember)

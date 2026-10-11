@@ -33,7 +33,7 @@ struct ClubsTabView: View {
         .onChange(of: services.dataVersion) { Task { await viewModel.load(services: services, now: clock.now) } }
         .sheet(isPresented: $isComposing) {
             ComposeClubEventSheet(clubs: viewModel.joinedClubs, now: clock.now) { draft in
-                Task { await viewModel.post(draft, services: services, now: clock.now) }
+                await viewModel.post(draft, services: services, now: clock.now)
             }
             .presentationDetents([.large])
         }
@@ -43,7 +43,7 @@ struct ClubsTabView: View {
             titleVisibility: .visible
         ) {
             Button("Leave club", role: .destructive) {
-                if let item = leaving { Task { await viewModel.leave(item, services: services) } }
+                if let item = leaving { Task { await viewModel.leave(item, services: services, now: clock.now) } }
                 leaving = nil
             }
             Button("Stay", role: .cancel) { leaving = nil }
@@ -83,13 +83,13 @@ struct ClubsTabView: View {
             ScrollView {
                 LazyVStack(spacing: 14) {
                     ForEach(items) { item in
-                        ClubEventCardView(item: item) {
+                        ClubEventCardView(item: item, isBusy: viewModel.isBusy(item)) {
                             if !item.isJoined {
-                                Task { await viewModel.act(on: item, services: services) }
+                                Task { await viewModel.act(on: item, services: services, now: clock.now) }
                             } else if item.access == .duesRequired {
                                 leaving = item   // asks first: leaving clears dues paid
                             } else {
-                                Task { await viewModel.leave(item, services: services) }
+                                Task { await viewModel.leave(item, services: services, now: clock.now) }
                             }
                         }
                         .contextMenu {
@@ -109,7 +109,11 @@ struct ClubsTabView: View {
 
     private var postButton: some View {
         Button {
-            isComposing = true
+            if services.isDemoMode {
+                viewModel.errorMessage = ClubsViewModel.demoPostMessage
+            } else {
+                isComposing = true
+            }
         } label: {
             Label("Post", systemImage: "plus")
                 .font(.title3.weight(.heavy))

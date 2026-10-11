@@ -62,11 +62,13 @@ struct FriendScheduleOverlayView: View {
         )) {
             if let draft = viewModel.composeDraft {
                 ComposeInviteSheet(draft: draft, friends: viewModel.selectedFriend.map { [$0] } ?? []) { posted in
-                    Task {
-                        if await viewModel.post(posted, services: services) {
-                            router.selectedTab = .invites   // show the new invite in the feed
-                        }
+                    let saved = await viewModel.post(posted, services: services)
+                    if saved {
+                        router.selectedTab = .invites   // show the new invite in the feed
+                    } else {
+                        viewModel.errorMessage = nil    // the sheet shows the failure itself
                     }
+                    return saved
                 }
                 .presentationDetents([.large])
             }

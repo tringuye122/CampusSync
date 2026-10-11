@@ -48,6 +48,9 @@ final class SyncCoordinator {
     @ObservationIgnored private var changePending = false
     /// Latest club names by id, so events can be refreshed without waiting for a club change.
     @ObservationIgnored private var clubNames: [String: String] = [:]
+    /// Bumped when the student posts or deletes an event. A fetch that started before then is
+    /// out of date and is dropped instead of deleting or resurrecting that event.
+    @ObservationIgnored private var eventsGeneration = 0
 
     init(context: ModelContext) {
         self.context = context
@@ -306,22 +309,31 @@ final class SyncCoordinator {
     /// fetched in parallel, one task per club.
     func refreshEvents() async {
         let names = clubNames
+        // Until the clubs listener has answered there is nothing to compare against, and an empty
+        // result would be mistaken for "every event was removed".
+        guard !names.isEmpty else { return }
+        let generation = eventsGeneration
         var remote: [String: ClubEvent] = [:]
-        await withTaskGroup(of: [ClubEvent].self) { group in
+        var fetchedClubs: Set<String> = []   // only these clubs' cached events may be deleted
+        await withTaskGroup(of: (String, [ClubEvent]?).self) { group in
             for (clubID, clubName) in names {
                 group.addTask { @MainActor [db] in
+                    // nil (not an empty list) when the fetch fails, so a bad connection or a denied read
+                    // never looks like "this club has no events".
                     guard let snapshot = try? await db.collection("clubs").document(clubID).collection("events").getDocuments()
-                    else { return [] }
-                    return snapshot.documents.compactMap {
+                    else { return (clubID, nil) }
+                    return (clubID, snapshot.documents.compactMap {
                         FirestoreCoding.event(id: $0.documentID, clubID: clubID, clubName: clubName, data: $0.data())
-                    }
+                    })
                 }
             }
-            for await events in group {
+            for await (clubID, events) in group {
+                guard let events else { continue }
+                fetchedClubs.insert(clubID)
                 for event in events { remote[event.id] = event }
             }
         }
-        guard uid != nil else { return }
+        guard uid != nil, generation == eventsGeneration else { return }
         var existing: [String: ClubEvent] = [:]
         for event in (try? context.fetch(FetchDescriptor<ClubEvent>())) ?? [] { existing[event.id] = event }
         for (id, fresh) in remote {
@@ -340,8 +352,16 @@ final class SyncCoordinator {
                 context.insert(fresh)
             }
         }
-        for (id, event) in existing where remote[id] == nil { context.delete(event) }
+        // Gone from the server: only for clubs that were fetched, plus events of clubs that no longer exist.
+        for (id, event) in existing where remote[id] == nil && (fetchedClubs.contains(event.clubID) || names[event.clubID] == nil) {
+            context.delete(event)
+        }
         save()
+    }
+
+    /// Call right before posting or deleting an event, so an older in-flight fetch cannot undo it.
+    func eventsChangedLocally() {
+        eventsGeneration += 1
     }
 
     private func save() {

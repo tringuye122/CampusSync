@@ -34,10 +34,12 @@ struct FriendsView: View {
                             studentLabel(request.other)
                             Spacer()
                             Button("Decline") { Task { await viewModel.decline(request, services: services) } }
+                            .disabled(viewModel.isWorking)
                                 .buttonStyle(.bordered)
                                 .tint(Theme.textPrimary)
                                 .minTapTarget()
                             Button("Accept") { Task { await viewModel.accept(request, services: services) } }
+                            .disabled(viewModel.isWorking)
                                 .buttonStyle(.borderedProminent)
                                 .tint(Theme.carolinaBlue)
                                 .foregroundStyle(Theme.navy)
@@ -55,6 +57,7 @@ struct FriendsView: View {
                             studentLabel(request.other)
                             Spacer()
                             Button("Cancel") { Task { await viewModel.cancel(request, services: services) } }
+                            .disabled(viewModel.isWorking)
                                 .buttonStyle(.borderless)
                                 .tint(Theme.textPrimary)
                                 .minTapTarget()
@@ -108,12 +111,14 @@ struct FriendsView: View {
                         Text("Requested").foregroundStyle(.secondary)
                     case .wantsToBeFriends(let request):
                         Button("Accept") { Task { await viewModel.accept(request, services: services) } }
+                            .disabled(viewModel.isWorking)
                             .buttonStyle(.borderedProminent)
                             .tint(Theme.carolinaBlue)
                             .foregroundStyle(Theme.navy)
                             .minTapTarget()
                     case .stranger:
                         Button("Add") { Task { await viewModel.sendRequest(to: result, services: services) } }
+                            .disabled(viewModel.isWorking)
                             .buttonStyle(.borderedProminent)
                             .tint(Theme.carolinaBlue)
                             .foregroundStyle(Theme.navy)

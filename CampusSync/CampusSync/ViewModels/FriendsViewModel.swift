@@ -19,6 +19,9 @@ final class FriendsViewModel {
     /// True after a load failed, so the view can say it is showing saved data.
     private(set) var isOffline = false
 
+    /// True while a request, answer or unfriend is being sent; the buttons are disabled meanwhile.
+    private(set) var isWorking = false
+
     var searchText = ""
     private(set) var searchResults: [FriendSummary] = []
     /// True once a search for the current text has finished, so "no matches" is not shown while typing.
@@ -102,6 +105,11 @@ final class FriendsViewModel {
     /// Runs a write, then reloads the lists, even after a failure: a failed answer usually means
     /// the lists were stale (for example the sender cancelled), and reloading fixes that.
     private func run(_ services: AppServices, _ action: () async throws -> Void) async {
+        // One write at a time: a second tap while the first is in flight would send a duplicate
+        // request or answer a request that is already answered.
+        guard !isWorking else { return }
+        isWorking = true
+        defer { isWorking = false }
         message = nil
         var failure: String?
         do {

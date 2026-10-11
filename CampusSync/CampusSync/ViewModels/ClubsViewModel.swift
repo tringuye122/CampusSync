@@ -43,7 +43,7 @@ final class ClubsViewModel {
 
     func load(services: AppServices, now: Date) async {
         do {
-            let clubs = Dictionary(uniqueKeysWithValues: try await services.clubs.clubs().map { ($0.id, $0) })
+            let clubs = Dictionary(try await services.clubs.clubs().map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             let events = try await services.clubs.events(now: now)
             let user = try await services.users.currentUser()
             let joined = Set(user.joinedClubIDs)
@@ -81,25 +81,65 @@ final class ClubsViewModel {
         }
     }
 
-    /// Leave a joined club. A dues club also loses its dues-paid state (and the Verified Member badge).
-    func leave(_ item: Item, services: AppServices) async {
+    // MARK: Actions
+
+    /// Clubs with a membership change in flight. Their buttons are disabled, so a second tap cannot
+    /// repeat the change or (on a card that has just flipped to "Joined") undo it.
+    private(set) var busyClubIDs: Set<String> = []
+
+    func isBusy(_ item: Item) -> Bool { busyClubIDs.contains(item.clubID) }
+
+    /// Club events are real, public data. Demo mode keeps the student's schedule, friends and
+    /// invites fictional, but must not create real events (and its pinned clock would make the
+    /// rules reject them once real time passes it).
+    static let demoPostMessage = "Club events are real. Turn off Demo mode to post one."
+
+    private func changeMembership(
+        _ item: Item, services: AppServices, now: Date, failure: String, _ change: () async throws -> Void
+    ) async {
+        guard busyClubIDs.insert(item.clubID).inserted else { return }
+        defer { busyClubIDs.remove(item.clubID) }
         do {
-            try await services.clubs.leaveClub(id: item.clubID)
-            await services.syncWidget()
+            try await change()
+            await services.syncWidget()   // refreshes the header's Verified Member pill
+            await load(services: services, now: now)   // the card shows the new state before it is tappable again
         } catch {
-            errorMessage = "Couldn't leave the club. Try again."
+            errorMessage = failure
         }
     }
 
-    func post(_ draft: ClubEventDraft, services: AppServices, now: Date) async {
+    /// Leave a joined club. A dues club also loses its dues-paid state (and the Verified Member badge).
+    func leave(_ item: Item, services: AppServices, now: Date) async {
+        await changeMembership(item, services: services, now: now, failure: "Couldn't leave the club. Try again.") {
+            try await services.clubs.leaveClub(id: item.clubID)
+        }
+    }
+
+    /// Join for free clubs; Pay Dues (which also joins) for dues clubs.
+    func act(on item: Item, services: AppServices, now: Date) async {
+        await changeMembership(item, services: services, now: now, failure: "Couldn't update your membership. Try again.") {
+            if item.access == .duesRequired {
+                try await services.clubs.payDues(clubID: item.clubID)
+            } else {
+                try await services.clubs.joinClub(id: item.clubID)
+            }
+        }
+    }
+
+    /// Returns true when the event was posted.
+    @discardableResult
+    func post(_ draft: ClubEventDraft, services: AppServices, now: Date) async -> Bool {
+        guard !services.isDemoMode else {
+            errorMessage = Self.demoPostMessage
+            return false
+        }
         do {
             try await services.clubs.postEvent(draft)
             await load(services: services, now: now)
             await services.syncWidget()
-        } catch RepositoryError.notMember {
-            errorMessage = "Join the club first, then you can post its events."
+            return true
         } catch {
-            errorMessage = "Couldn't post the event. Try again."
+            return false   // the sheet says so itself; `notMember` cannot happen from the club picker
         }
     }
 
@@ -110,20 +150,6 @@ final class ClubsViewModel {
             await services.syncWidget()
         } catch {
             errorMessage = "Couldn't remove the event. Try again."
-        }
-    }
-
-    /// Join for free clubs; Pay Dues (which also joins) for dues clubs.
-    func act(on item: Item, services: AppServices) async {
-        do {
-            if item.access == .duesRequired {
-                try await services.clubs.payDues(clubID: item.clubID)
-            } else {
-                try await services.clubs.joinClub(id: item.clubID)
-            }
-            await services.syncWidget()   // refreshes the header's Verified Member pill
-        } catch {
-            errorMessage = "Couldn't update your membership. Try again."
         }
     }
 }

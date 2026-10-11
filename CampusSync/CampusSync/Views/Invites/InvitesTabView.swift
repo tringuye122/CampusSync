@@ -34,7 +34,9 @@ struct InvitesTabView: View {
                 draft: viewModel.standardDraft(now: clock.now),
                 friends: viewModel.friends
             ) { draft in
-                Task { await viewModel.post(draft, services: services, now: clock.now) }
+                let saved = await viewModel.post(draft, services: services, now: clock.now)
+                if !saved { viewModel.errorMessage = nil }   // the sheet shows the failure itself
+                return saved
             }
             .presentationDetents([.large])
         }
@@ -70,9 +72,10 @@ struct InvitesTabView: View {
                                 now: now,
                                 isGoing: viewModel.isGoing(invite),
                                 isFull: viewModel.isFull(invite),
-                                isHost: invite.hostID == viewModel.userID
+                                isHost: invite.hostID == viewModel.userID,
+                                isBusy: viewModel.isBusy(invite)
                             ) {
-                                Task { await viewModel.toggleRSVP(invite, services: services) }
+                                Task { await viewModel.toggleRSVP(invite, services: services, now: clock.now) }
                             }
                         }
                     }

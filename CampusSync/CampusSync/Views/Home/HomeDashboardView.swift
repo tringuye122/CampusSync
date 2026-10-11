@@ -41,6 +41,17 @@ struct HomeDashboardView: View {
         .onAppear { Task { await viewModel.load(services: services, now: clock.now) } }
         .onChange(of: services.sync.changeCount) { Task { await viewModel.load(services: services, now: clock.now) } }
         .onChange(of: services.dataVersion) { Task { await viewModel.load(services: services, now: clock.now) } }
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { if !$0 { viewModel.errorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.errorMessage ?? "")
+        }
     }
 
     // MARK: Friends free now
@@ -95,9 +106,10 @@ struct HomeDashboardView: View {
                                 now: now,
                                 isGoing: viewModel.isGoing(invite),
                                 isFull: viewModel.isFull(invite),
-                                isHost: invite.hostID == viewModel.userID
+                                isHost: invite.hostID == viewModel.userID,
+                                isBusy: viewModel.isBusy(invite)
                             ) {
-                                Task { await viewModel.toggleRSVP(invite, services: services) }
+                                Task { await viewModel.toggleRSVP(invite, services: services, now: clock.now) }
                             }
                             .frame(width: 320)
                         }

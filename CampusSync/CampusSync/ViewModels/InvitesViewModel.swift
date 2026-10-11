@@ -49,10 +49,20 @@ final class InvitesViewModel {
         invite.attendeeIDs.count >= invite.capacity && !isGoing(invite)
     }
 
-    func toggleRSVP(_ invite: OpenInvite, services: AppServices) async {
+    /// Invites with an RSVP change in flight. RSVP is a toggle, so a second tap before the first
+    /// finishes would undo it.
+    private(set) var busyInviteIDs: Set<String> = []
+
+    func isBusy(_ invite: OpenInvite) -> Bool { busyInviteIDs.contains(invite.id) }
+
+    func toggleRSVP(_ invite: OpenInvite, services: AppServices, now: Date) async {
+        guard busyInviteIDs.insert(invite.id).inserted else { return }
+        defer { busyInviteIDs.remove(invite.id) }
         do {
             try await services.invites.toggleRSVP(inviteID: invite.id)
             await services.syncWidget()
+            // Reload before the button is tappable again, so it never shows the old state.
+            await load(services: services, now: now)
         } catch RepositoryError.inviteFull {
             errorMessage = "That plan is full."
         } catch {

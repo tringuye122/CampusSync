@@ -13,7 +13,7 @@ The full spec is in `docs/CampusSync_Spec_Doc.md` and has been updated for the F
 - App Group shared container for app-to-widget data
 - Firebase Auth + Firestore are the live backend (accounts, friend graph, shared schedules, invites, clubs). Use the Firebase iOS SDK via Swift Package Manager, with only `FirebaseAuth` and `FirebaseFirestore`. Add the dependency during the Firebase phase, not before.
 - Sign-in is email and password restricted to `@unc.edu` with email verification. Friends are added by handle search with request and accept.
-- The local SwiftData repositories and `SampleData.swift` stay for previews, tests and offline fallback.
+- The local SwiftData repositories and `SampleData.swift` stay for previews, tests and offline fallback. The app never seeds sample data at launch: the cache holds only the signed-in student's own data.
 
 ## Hard rules
 
@@ -94,7 +94,7 @@ Status as of 2026-10-10: phases 0 to 10b are committed and pushed; the user sign
 10. UI redesign to the supplied PDF designs: shared header, Home, Schedule (Timetable / Friends / Classes with inline ratings), Invites, and the Clubs feed (access badges, schedule conflicts, Join and Pay Dues). Absorbs the old "Clubs" phase. (done; rules for major and class year deployed)
 10b. Design perfecting (done, signed off 2026-10-10): fixed the UI issues found on the phones against the six PDF designs (contrast, Home friend cards for all friends with a status, Classes layout, dotted free blocks, green toggles).
 10c. Clubs live (deferred by the user): seed the real project's clubs and events (`firebase/seed/seed.mjs --real`, needs admin credentials and the user's go-ahead) and verify Join and Pay Dues on device.
-11. Polish and demo prep: 11a demo seeding (done, uncommitted: `firebase/seed/seed.mjs demo | reset-demo | verify`, plan in `docs/superpowers/specs/2026-10-11-demo-data-design.md`); 11b Demo mode toggle in Account (done, uncommitted: local in-memory demo world, clock to Tue Oct 13 12:30 PM, off deletes it and returns to live); then dark mode and empty-state passes and demo recording
+11. Polish and demo prep: 11a demo seeding (done and pushed: `firebase/seed/seed.mjs demo | reset-demo | verify`, plan in `docs/superpowers/specs/2026-10-11-demo-data-design.md`); 11b Demo mode toggle in Account (done and pushed: local in-memory demo world, clock to Tue Oct 13 12:30 PM, off deletes it and returns to live); then dark mode and empty-state passes and demo recording
 12. Stretch: `.ics` import, push notifications (FCM), report and block, App Check
 
 Known follow-ups (not scheduled): invite recipients being friends is enforced by the app only, since rules cannot loop over `recipientIDs` (a per-recipient inbox design would fix it); invite listeners are unbounded until an `expiresAt` composite index is added and deployed; a widget redesign has no design yet; a custom sender domain if the verification email stays slow.

@@ -7,8 +7,9 @@
 //     Firestore listeners. So screens load instantly and keep working offline.
 //   - Writes update the cache straight away (optimistic) and send the change to
 //     Firestore without waiting for the server, so Firestore's offline queue holds them
-//     until the connection returns. If the rules reject a write, the listener removes
-//     the optimistic copy again and the failure is logged.
+//     until the connection returns. If the rules reject a write, the listeners (invites,
+//     memberships) put the cache right again; club events have no listener, so their repository
+//     refreshes events itself once the server has answered. The failure is logged.
 //
 
 import FirebaseAuth
@@ -18,9 +19,10 @@ import Foundation
 private var db: Firestore { Firestore.firestore() }
 private var signedInUID: String? { Auth.auth().currentUser?.uid }
 
-private func logWrite(_ what: String) -> (Error?) -> Void {
+private func logWrite(_ what: String, then afterwards: (@MainActor () -> Void)? = nil) -> (Error?) -> Void {
     { error in
         if let error { debugLog("Firestore write failed (\(what)): \(error.localizedDescription)") }
+        if let afterwards { Task { @MainActor in afterwards() } }
     }
 }
 
@@ -58,7 +60,18 @@ enum ScheduleSharing {
     /// Replaces the published meetings with `classes` (or removes them all when sharing is off).
     /// Documents are m0, m1, ...; any left over from a longer schedule are deleted.
     static func publish(classes: [ClassSchedule]) {
-        guard let uid = signedInUID else { return }
+        makeBatch(classes: classes)?.commit(completion: logWrite("schedule"))
+    }
+
+    /// Like `publish`, but waits for the server. Throws `notConfirmed` when it does not answer in
+    /// time (offline); the write stays queued and goes through when the connection returns.
+    static func publishConfirmed(classes: [ClassSchedule]) async throws {
+        guard let batch = makeBatch(classes: classes) else { return }
+        try await withTimeout(onTimeout: { ScheduleSharingError.notConfirmed }) { try await batch.commit() }
+    }
+
+    private static func makeBatch(classes: [ClassSchedule]) -> WriteBatch? {
+        guard let uid = signedInUID else { return nil }
         let meetings = ScheduleSharingSetting.isEnabled ? Array(publishable(classes).prefix(maxMeetings)) : []
         let batch = db.batch()
         let collection = db.collection("schedules").document(uid).collection("meetings")
@@ -70,7 +83,7 @@ enum ScheduleSharing {
                 batch.deleteDocument(document)   // deleting a missing document is allowed
             }
         }
-        batch.commit(completion: logWrite("schedule"))
+        return batch
     }
 }
 
@@ -98,7 +111,9 @@ final class FirestoreScheduleRepository: ScheduleRepository {
 
     func setSharesScheduleWithFriends(_ shares: Bool) async throws {
         try await local.setSharesScheduleWithFriends(shares)
-        ScheduleSharing.publish(classes: try await local.classes())   // publishes, or clears when off
+        // Publishes, or clears when off, and waits so the Account screen can say when the server
+        // has not confirmed it (friends keep seeing the schedule until it does).
+        try await ScheduleSharing.publishConfirmed(classes: try await local.classes())
     }
 
     /// Accepted friends, with their shared meetings, as last mirrored by `SyncCoordinator`.
@@ -149,10 +164,18 @@ final class FirestoreInviteRepository: InviteRepository {
 final class FirestoreClubRepository: ClubRepository {
     private let local: LocalClubRepository
     private let users: UserRepository
+    private let sync: SyncCoordinator
 
-    init(local: LocalClubRepository, users: UserRepository) {
+    init(local: LocalClubRepository, users: UserRepository, sync: SyncCoordinator) {
         self.local = local
         self.users = users
+        self.sync = sync
+    }
+
+    /// After the server has answered a post or delete (accepted or rejected), re-read the events so
+    /// the cache matches the server: a rejected post disappears, a rejected delete comes back.
+    private func refreshEventsAfterWrite() -> @MainActor () -> Void {
+        { [sync] in Task { await sync.refreshEvents() } }
     }
 
     func clubs() async throws -> [Club] { try await local.clubs() }
@@ -189,18 +212,20 @@ final class FirestoreClubRepository: ClubRepository {
     }
 
     func postEvent(_ draft: ClubEventDraft) async throws -> ClubEvent {
+        sync.eventsChangedLocally()
         let event = try await local.postEvent(draft)
         db.collection("clubs").document(event.clubID).collection("events").document(event.id)
-            .setData(FirestoreCoding.data(for: event), completion: logWrite("post club event"))
+            .setData(FirestoreCoding.data(for: event), completion: logWrite("post club event", then: refreshEventsAfterWrite()))
         return event
     }
 
     func deleteEvent(id: String) async throws {
         let clubID = try await local.events(now: .distantPast).first { $0.id == id }?.clubID
+        sync.eventsChangedLocally()
         try await local.deleteEvent(id: id)
         if let clubID {
             db.collection("clubs").document(clubID).collection("events").document(id)
-                .delete(completion: logWrite("delete club event"))
+                .delete(completion: logWrite("delete club event", then: refreshEventsAfterWrite()))
         }
     }
 }

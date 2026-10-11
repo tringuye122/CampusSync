@@ -15,6 +15,8 @@ struct OpenInviteCardView: View {
     let isGoing: Bool
     let isFull: Bool
     let isHost: Bool
+    /// An RSVP change is in flight: the button is disabled until it finishes.
+    var isBusy = false
     let onToggleRSVP: () -> Void
 
     var body: some View {
@@ -76,6 +78,7 @@ struct OpenInviteCardView: View {
                     .background(Theme.navy, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
+            .disabled(isBusy)
             .accessibilityHint("Double tap to cancel your RSVP")
         } else if isFull {
             Text("Full")
@@ -92,6 +95,7 @@ struct OpenInviteCardView: View {
                     .background(Theme.carolinaBlue, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
+            .disabled(isBusy)
         }
     }
 }

@@ -11,14 +11,23 @@ import SwiftUI
 struct ComposeInviteSheet: View {
     @State var draft: ComposeDraft
     let friends: [FriendProfile]
-    let onPost: (ComposeDraft) -> Void
+    /// Returns true when the invite was saved. The sheet stays open (with the draft) until then.
+    let onPost: (ComposeDraft) async -> Bool
 
+    @State private var isPosting = false
+    @State private var postFailed = false
     @Environment(\.dismiss) private var dismiss
     @Environment(AppClock.self) private var clock
 
     var body: some View {
         NavigationStack {
             Form {
+                if postFailed {
+                    Section {
+                        Label("Couldn't post. Check your connection and try again.", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Theme.textPrimary)
+                    }
+                }
                 Section("Plan") {
                     TextField(draft.resolvedTitle, text: $draft.title)
                         .minTapTarget()
@@ -78,17 +87,28 @@ struct ComposeInviteSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isPosting)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Post") {
-                        onPost(draft)
-                        dismiss()
+                    if isPosting {
+                        ProgressView()
+                    } else {
+                        Button("Post") { Task { await submit() } }
+                            .fontWeight(.semibold)
+                            .disabled(!draft.canPost)
                     }
-                    .fontWeight(.semibold)
-                    .disabled(!draft.canPost)
                 }
             }
         }
+    }
+
+    /// One post at a time; closes only once the post worked.
+    private func submit() async {
+        guard !isPosting else { return }
+        isPosting = true
+        postFailed = false
+        defer { isPosting = false }
+        if await onPost(draft) { dismiss() } else { postFailed = true }
     }
 
     private func recipientBinding(for id: String) -> Binding<Bool> {
@@ -106,7 +126,7 @@ struct ComposeInviteSheet: View {
     return ComposeInviteSheet(
         draft: ComposeDraft.standard(now: now, friendIDs: SampleData.friends().map(\.id)),
         friends: SampleData.friends(),
-        onPost: { _ in }
+        onPost: { _ in true }
     )
     .environment(AppClock())
 }
