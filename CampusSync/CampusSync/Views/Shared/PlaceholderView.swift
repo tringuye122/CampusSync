@@ -14,7 +14,7 @@ struct PlaceholderView: View {
 
     var body: some View {
         NavigationStack {
-            ContentUnavailableView(title, systemImage: symbol, description: Text(message))
+            ContentUnavailableView(title, systemImage: symbol, description: Text(message).foregroundStyle(Theme.textPrimary))
                 .background(Theme.screenBackground)
                 .navigationTitle(title)
         }

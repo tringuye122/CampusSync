@@ -78,7 +78,7 @@ struct ClubsTabView: View {
     private var content: some View {
         let items = viewModel.visibleItems(filter: filter)
         if items.isEmpty {
-            ContentUnavailableView(emptyTitle, systemImage: "star.circle", description: Text(emptyDetail))
+            ContentUnavailableView(emptyTitle, systemImage: "star.circle", description: Text(emptyDetail).foregroundStyle(Theme.textPrimary))
         } else {
             ScrollView {
                 LazyVStack(spacing: 14) {
@@ -117,6 +117,8 @@ struct ClubsTabView: View {
                 .padding(.horizontal, 28)
                 .frame(minHeight: 60)
                 .background(Theme.navy, in: Capsule())
+                // Navy on the dark-mode cards is nearly invisible, so the button gets an edge.
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.45), lineWidth: 1.5))
                 .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
         }
         .padding(20)
@@ -143,6 +145,14 @@ struct ClubsTabView: View {
 #Preview {
     ClubsTabView()
         .environment(AppServices.preview())
+        .environment(AppClock())
+        .environment(AppRouter())
+        .environment(AuthService(backend: MockAuthBackend(), defaults: UserDefaults(suiteName: "preview-auth")!))
+}
+
+#Preview("New account") {
+    ClubsTabView()
+        .environment(AppServices.previewEmpty())
         .environment(AppClock())
         .environment(AppRouter())
         .environment(AuthService(backend: MockAuthBackend(), defaults: UserDefaults(suiteName: "preview-auth")!))

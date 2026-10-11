@@ -59,7 +59,7 @@ struct InvitesTabView: View {
                 ContentUnavailableView(
                     filter == .all ? "No plans right now" : "No \(filter.title.lowercased()) plans",
                     systemImage: "paperplane",
-                    description: Text("Tap + Post to invite your friends to something.")
+                    description: Text("Tap + Post to invite your friends to something.").foregroundStyle(Theme.textPrimary)
                 )
             } else {
                 ScrollView {
@@ -95,6 +95,8 @@ struct InvitesTabView: View {
                 .padding(.horizontal, 28)
                 .frame(minHeight: 60)
                 .background(Theme.navy, in: Capsule())
+                // Navy on the dark-mode cards is nearly invisible, so the button gets an edge.
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.45), lineWidth: 1.5))
                 .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
         }
         .padding(20)
@@ -105,6 +107,14 @@ struct InvitesTabView: View {
 #Preview {
     InvitesTabView()
         .environment(AppServices.preview())
+        .environment(AppClock())
+        .environment(AppRouter())
+        .environment(AuthService(backend: MockAuthBackend(), defaults: UserDefaults(suiteName: "preview-auth")!))
+}
+
+#Preview("New account") {
+    InvitesTabView()
+        .environment(AppServices.previewEmpty())
         .environment(AppClock())
         .environment(AppRouter())
         .environment(AuthService(backend: MockAuthBackend(), defaults: UserDefaults(suiteName: "preview-auth")!))

@@ -114,6 +114,7 @@ struct ScheduleTabView: View {
             Label("No classes yet", systemImage: "calendar.badge.plus")
         } description: {
             Text("Import your ConnectCarolina class schedule PDF, or load the demo schedule.")
+                .foregroundStyle(Theme.textPrimary)
         } actions: {
             Button("Import PDF") { isPickingFile = true }
                 .buttonStyle(.borderedProminent)
@@ -153,5 +154,13 @@ struct ScheduleTabView: View {
         .environment(AppServices.preview())
         .environment(AppClock())
         .environment(router)
+        .environment(AuthService(backend: MockAuthBackend(), defaults: UserDefaults(suiteName: "preview-auth")!))
+}
+
+#Preview("New account") {
+    ScheduleTabView()
+        .environment(AppServices.previewEmpty())
+        .environment(AppClock())
+        .environment(AppRouter())
         .environment(AuthService(backend: MockAuthBackend(), defaults: UserDefaults(suiteName: "preview-auth")!))
 }

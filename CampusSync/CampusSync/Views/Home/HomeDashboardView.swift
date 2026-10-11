@@ -151,3 +151,11 @@ struct HomeDashboardView: View {
             clock.setOverride(to: DemoWorld.moment())
         }
 }
+
+#Preview("New account") {
+    HomeDashboardView()
+        .environment(AppServices.previewEmpty())
+        .environment(AppClock())
+        .environment(AppRouter())
+        .environment(AuthService(backend: MockAuthBackend(), defaults: UserDefaults(suiteName: "preview-auth")!))
+}

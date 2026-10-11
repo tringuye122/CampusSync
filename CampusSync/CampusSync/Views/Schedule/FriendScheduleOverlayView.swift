@@ -252,7 +252,7 @@ struct FriendScheduleOverlayView: View {
     }
 
     private func message(_ title: String, _ symbol: String, _ detail: String) -> some View {
-        ContentUnavailableView(title, systemImage: symbol, description: Text(detail))
+        ContentUnavailableView(title, systemImage: symbol, description: Text(detail).foregroundStyle(Theme.textPrimary))
     }
 }
 

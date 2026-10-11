@@ -166,6 +166,16 @@ final class AppServices {
         }
     }
 
+    /// A brand-new account: the student only, with no classes, friends, invites or clubs yet.
+    /// For previews of the empty states.
+    static func previewEmpty() -> AppServices {
+        let container = SampleData.emptyPreviewContainer()
+        return AppServices(
+            context: container.mainContext, ratings: PreviewRatingProvider(),
+            friends: InMemoryFriendRepository(me: FriendSummary(id: SampleData.userID, displayName: "Tri Nguyen", handle: "tri")),
+            retaining: container)
+    }
+
     /// Seeded in-memory services for previews. Never touches the network: ratings
     /// come from a fixed stub.
     static func preview(now: Date = Date(), friends: FriendRepository = InMemoryFriendRepository.preview()) -> AppServices {

@@ -186,6 +186,16 @@ enum SampleData {
 
     /// In-memory container loaded with seed data, for SwiftUI previews and tests.
     @MainActor
+    /// Only the student, like a fresh sign-up before importing a schedule or adding friends.
+    static func emptyPreviewContainer() -> ModelContainer {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        // swiftlint:disable:next force_try
+        let container = try! ModelContainer(for: Schema(AppSchema.models), configurations: config)
+        container.mainContext.insert(user())
+        try? container.mainContext.save()
+        return container
+    }
+
     static func previewContainer(now: Date = Date()) -> ModelContainer {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         // swiftlint:disable:next force_try
