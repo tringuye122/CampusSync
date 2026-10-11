@@ -47,7 +47,7 @@ final class ClubsViewModel {
             let events = try await services.clubs.events(now: now)
             let user = try await services.users.currentUser()
             let joined = Set(user.joinedClubIDs)
-            joinedClubs = clubs.values.filter { joined.contains($0.id) }.sorted { $0.name < $1.name }
+            joinedClubs = clubs.values.filter { joined.contains($0.id) }.sorted { $0.name < $1.name }.map(\.detachedCopy)
             let slots = ((try? await services.schedule.classes()) ?? []).map(ClassSlot.init)
 
             items = events.map { event in

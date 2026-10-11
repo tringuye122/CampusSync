@@ -322,6 +322,55 @@ struct FirebaseIntegrationTests {
         try backend.signOut()
     }
 
+    /// Reset (Account) against the real repositories and rules: it must finish promptly and leave
+    /// the server without the student's invites, club events and memberships.
+    @Test func resetMyActivityFinishesAndClearsTheServer() async throws {
+        try requireEmulator()
+        let db = Firestore.firestore()
+        let student = try await makeStudent(name: "Rae Example")
+        let services = try makeServices()
+        services.sync.start(account: UserAccount(uid: student.uid, email: student.email, displayName: "Rae Example", handle: student.handle))
+        let clubID = "it-reset-\(UUID().uuidString.prefix(6))"
+        try await seedDuesClub(id: clubID)
+        #expect(await eventually { try await services.clubs.clubs().contains { $0.id == clubID } })
+
+        try await services.clubs.payDues(clubID: clubID)
+        let event = try await services.clubs.postEvent(ClubEventDraft(
+            clubID: clubID, title: "Reset test", location: "Here", start: Date().addingTimeInterval(3600)))
+        let invite = OpenInvite(
+            title: "Reset invite", landmark: .thePit, category: .food,
+            startTime: Date().addingTimeInterval(3600), expiresAt: Date().addingTimeInterval(7200),
+            hostID: student.uid, hostName: "Rae Example", attendeeIDs: [student.uid], recipientIDs: ["someone-else"])
+        try await services.invites.post(invite)
+        #expect(await eventually {
+            let membership = try await db.collection("users").document(student.uid).collection("memberships").document(clubID)
+                .getDocument(source: .server)
+            let eventDoc = try await db.collection("clubs").document(clubID).collection("events").document(event.id)
+                .getDocument(source: .server)
+            let inviteDoc = try await db.collection("invites").document(invite.id).getDocument(source: .server)
+            return membership.exists && eventDoc.exists && inviteDoc.exists
+        })
+
+        let started = Date()
+        try await services.resetMyActivity()
+        #expect(Date().timeIntervalSince(started) < 5)   // returns, instead of spinning
+
+        try? await Task.sleep(for: .seconds(6))
+        let membershipLeft = try await db.collection("users").document(student.uid).collection("memberships").document(clubID)
+            .getDocument(source: .server).exists
+        let eventLeft = try await db.collection("clubs").document(clubID).collection("events").document(event.id)
+            .getDocument(source: .server).exists
+        // Reading a document that does not exist is denied by the invite read rule, which means it is gone.
+        let inviteLeft = (try? await db.collection("invites").document(invite.id).getDocument(source: .server).exists) ?? false
+        #expect(!membershipLeft, "membership still on the server")
+        #expect(!eventLeft, "club event still on the server")
+        #expect(!inviteLeft, "invite still on the server")
+        let user = try await services.users.currentUser()
+        #expect(user.joinedClubIDs.isEmpty && !user.isVerifiedMember)
+        services.sync.stop(wipeCache: true)
+        try backend.signOut()
+    }
+
     @Test func wrongPasswordMapsToTheAppsOwnError() async throws {
         try requireEmulator()
         let email = freshEmail()

@@ -14,16 +14,18 @@ import Observation
 final class InvitesViewModel {
     private(set) var invites: [OpenInvite] = []
     private(set) var friends: [FriendProfile] = []
-    private(set) var user: UserProfile?
+    /// The student's id and name, copied out so no live model is kept (see DetachedCopies.swift).
+    private(set) var userID: String?
+    private(set) var userName: String?
     var errorMessage: String?
-
-    var userID: String? { user?.id }
 
     func load(services: AppServices, now: Date) async {
         do {
-            user = try await services.users.currentUser()
-            friends = try await services.schedule.friends()
-            invites = try await services.invites.activeInvites(now: now)
+            let user = try await services.users.currentUser()
+            userID = user.id
+            userName = user.displayName
+            friends = try await services.schedule.friends().map(\.detachedCopy)
+            invites = try await services.invites.activeInvites(now: now).map(\.detachedCopy)
         } catch {
             errorMessage = "Couldn't load invites."
         }
@@ -73,9 +75,9 @@ final class InvitesViewModel {
     /// Returns true when the invite was saved.
     @discardableResult
     func post(_ draft: ComposeDraft, services: AppServices, now: Date) async -> Bool {
-        guard let user else { return false }
+        guard let userID, let userName else { return false }
         do {
-            try await services.invites.post(draft.makeInvite(hostID: user.id, hostName: user.displayName))
+            try await services.invites.post(draft.makeInvite(hostID: userID, hostName: userName))
             await load(services: services, now: now)
             await services.syncWidget()
             return true

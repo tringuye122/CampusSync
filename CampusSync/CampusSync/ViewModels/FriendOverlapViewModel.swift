@@ -82,7 +82,7 @@ final class FriendOverlapViewModel {
     func load(services: AppServices, focus: String? = nil) async {
         do {
             myMeetings = try await services.schedule.classes().map(\.meeting)
-            friends = try await services.schedule.friends()
+            friends = try await services.schedule.friends().map(\.detachedCopy)
             errorMessage = nil
         } catch {
             errorMessage = "Couldn't load schedules."

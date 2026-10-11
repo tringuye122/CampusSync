@@ -32,7 +32,7 @@ final class ScheduleViewModel {
 
     func load(from repository: ScheduleRepository) async {
         do {
-            classes = try await repository.classes()
+            classes = try await repository.classes().map(\.detachedCopy)
             let meetings = classes.map(\.meeting)
             freeSlotsByDay = Dictionary(uniqueKeysWithValues: Weekday.allCases.map {
                 ($0, FreeSlotCalculator.freeSlots(on: $0, meetings: meetings, settings: settings))

@@ -26,7 +26,7 @@ final class HomeViewModel {
             FriendSchedule(id: $0.id, name: $0.displayName, meetings: $0.classes)
         }
         userID = try? await services.users.currentUser().id
-        invites = (try? await services.invites.activeInvites(now: now)) ?? []
+        invites = ((try? await services.invites.activeInvites(now: now)) ?? []).map(\.detachedCopy)
     }
 
     /// Today's classes in order, for the collapsible Today card. Empty on weekends.

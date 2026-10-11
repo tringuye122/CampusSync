@@ -156,6 +156,19 @@ final class FirestoreInviteRepository: InviteRepository {
         db.collection("invites").document(inviteID)
             .updateData(["attendeeIDs": change], completion: logWrite("RSVP"))
     }
+
+    func removeMyInvitesAndRSVPs() async throws -> InviteReset {
+        let reset = try await local.removeMyInvitesAndRSVPs()
+        let user = try await users.currentUser()
+        for id in reset.deletedInviteIDs {
+            db.collection("invites").document(id).delete(completion: logWrite("reset: delete invite"))
+        }
+        for id in reset.leftInviteIDs {
+            db.collection("invites").document(id)
+                .updateData(["attendeeIDs": FieldValue.arrayRemove([user.id])], completion: logWrite("reset: leave invite"))
+        }
+        return reset
+    }
 }
 
 // MARK: - Clubs
@@ -217,6 +230,21 @@ final class FirestoreClubRepository: ClubRepository {
         db.collection("clubs").document(event.clubID).collection("events").document(event.id)
             .setData(FirestoreCoding.data(for: event), completion: logWrite("post club event", then: refreshEventsAfterWrite()))
         return event
+    }
+
+    func removeMyEventsAndMemberships() async throws -> ClubReset {
+        let user = try await users.currentUser()
+        sync.eventsChangedLocally()
+        let reset = try await local.removeMyEventsAndMemberships()
+        for event in reset.deletedEvents {
+            db.collection("clubs").document(event.clubID).collection("events").document(event.eventID)
+                .delete(completion: logWrite("reset: delete club event", then: refreshEventsAfterWrite()))
+        }
+        for clubID in reset.leftClubIDs {
+            db.collection("users").document(user.id).collection("memberships").document(clubID)
+                .delete(completion: logWrite("reset: leave club"))
+        }
+        return reset
     }
 
     func deleteEvent(id: String) async throws {

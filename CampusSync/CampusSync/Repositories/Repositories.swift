@@ -49,6 +49,27 @@ protocol InviteRepository {
     func post(_ invite: OpenInvite) async throws
     /// Adds or removes the current user as an attendee.
     func toggleRSVP(inviteID: String) async throws
+    /// Reset: deletes every invite the user hosts (expired or not) and takes the user off the
+    /// guest list of invites they were invited to.
+    @discardableResult
+    func removeMyInvitesAndRSVPs() async throws -> InviteReset
+}
+
+/// What a reset removed, so the Firestore repository can mirror it on the server.
+struct InviteReset: Equatable {
+    var deletedInviteIDs: [String] = []
+    var leftInviteIDs: [String] = []
+}
+
+struct ClubReset: Equatable {
+    /// (event id, club id) of events the user posted.
+    var deletedEvents: [DeletedEvent] = []
+    var leftClubIDs: [String] = []
+
+    struct DeletedEvent: Equatable {
+        var eventID: String
+        var clubID: String
+    }
 }
 
 protocol ClubRepository {
@@ -67,6 +88,10 @@ protocol ClubRepository {
     func postEvent(_ draft: ClubEventDraft) async throws -> ClubEvent
     /// Removes an event the user posted.
     func deleteEvent(id: String) async throws
+    /// Reset: deletes every event the user posted and leaves every club (which also clears dues
+    /// paid and the Verified Member badge).
+    @discardableResult
+    func removeMyEventsAndMemberships() async throws -> ClubReset
 }
 
 enum ScheduleSharingError: Error, Equatable {

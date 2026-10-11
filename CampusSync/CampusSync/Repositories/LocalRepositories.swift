@@ -159,6 +159,23 @@ final class LocalInviteRepository: InviteRepository {
         try context.save()
     }
 
+    func removeMyInvitesAndRSVPs() async throws -> InviteReset {
+        let user = try currentUser()
+        var reset = InviteReset()
+        for invite in try context.fetch(FetchDescriptor<OpenInvite>()) {
+            if invite.hostID == user.id {
+                reset.deletedInviteIDs.append(invite.id)
+                context.delete(invite)
+            } else if invite.attendeeIDs.contains(user.id) {
+                reset.leftInviteIDs.append(invite.id)
+                invite.attendeeIDs.removeAll { $0 == user.id }
+            }
+        }
+        user.rsvpedInviteIDs = []
+        try context.save()
+        return reset
+    }
+
     private func currentUser() throws -> UserProfile { try context.currentUserProfile() }
 }
 
@@ -235,6 +252,20 @@ final class LocalClubRepository: ClubRepository {
         guard event.posterID == user.id else { throw RepositoryError.notMember }
         context.delete(event)
         try context.save()
+    }
+
+    func removeMyEventsAndMemberships() async throws -> ClubReset {
+        let user = try currentUser()
+        var reset = ClubReset()
+        for event in try context.fetch(FetchDescriptor<ClubEvent>()) where !event.posterID.isEmpty && event.posterID == user.id {
+            reset.deletedEvents.append(.init(eventID: event.id, clubID: event.clubID))
+            context.delete(event)
+        }
+        reset.leftClubIDs = user.joinedClubIDs
+        user.joinedClubIDs = []
+        user.isVerifiedMember = false
+        try context.save()
+        return reset
     }
 
     private func club(id: String) throws -> Club? {

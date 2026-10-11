@@ -138,6 +138,21 @@ final class AppServices {
         await sync.refreshAll()
     }
 
+    /// Clears what this student did while trying the app, between live demos: the invites they
+    /// posted, their RSVPs, the club events they posted and every club membership. Friends,
+    /// the schedule and the account stay. Live data only (demo mode has nothing live to reset).
+    func resetMyActivity() async throws {
+        guard !isDemoMode else { return }
+        // Each step is logged (debug builds), so a stall shows in the console as the last line.
+        debugLog("reset: removing my invites and RSVPs")
+        try await invites.removeMyInvitesAndRSVPs()
+        debugLog("reset: removing my club events and memberships")
+        try await clubs.removeMyEventsAndMemberships()
+        debugLog("reset: refreshing the widget")
+        await syncWidget()
+        debugLog("reset: done")
+    }
+
     /// Rewrites the widget snapshot from current local data and reloads widget timelines.
     /// Call after any local write (new invite, RSVP, import) and when the app foregrounds.
     func syncWidget() async {

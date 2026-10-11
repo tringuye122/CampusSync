@@ -156,3 +156,106 @@ struct ReviewFixesTests {
         #expect(!model.isWorking)
     }
 }
+
+@MainActor
+struct ResetActivityTests {
+    @Test func resetClearsMyPostsRSVPsAndMembershipsButKeepsFriendsAndSchedule() async throws {
+        let services = AppServices.preview()
+        let now = Date()
+        let user = try await services.users.currentUser()
+
+        // Some activity: a hosted invite, an RSVP to someone else's, a club (dues) and my own club event.
+        let hosted = OpenInvite(title: "Mine", landmark: .thePit, category: .food, startTime: now.addingTimeInterval(3600),
+                                expiresAt: now.addingTimeInterval(7200), hostID: user.id, hostName: user.displayName,
+                                attendeeIDs: [user.id], recipientIDs: [SampleData.mayaID], capacity: 8)
+        try await services.invites.post(hosted)
+        let others = try await services.invites.activeInvites(now: now).first { $0.hostID != user.id && !$0.attendeeIDs.contains(user.id) }
+        let theirs = try #require(others)
+        try await services.invites.toggleRSVP(inviteID: theirs.id)
+        try await services.clubs.payDues(clubID: SampleData.robotsClubID)
+        try await services.clubs.joinClub(id: SampleData.aiClubID)
+        try await services.clubs.postEvent(ClubEventDraft(clubID: SampleData.aiClubID, title: "Mine", location: "Here", start: now.addingTimeInterval(3600)))
+        let classCount = try await services.schedule.classes().count
+        let friendCount = try await services.schedule.friends().count
+        #expect(user.isVerifiedMember)
+
+        try await services.resetMyActivity()
+
+        let after = try await services.users.currentUser()
+        #expect(after.joinedClubIDs.isEmpty && !after.isVerifiedMember && after.rsvpedInviteIDs.isEmpty)
+        let invites = try await services.invites.activeInvites(now: now)
+        #expect(invites.contains { $0.id == hosted.id } == false)
+        #expect(invites.first { $0.id == theirs.id }?.attendeeIDs.contains(user.id) == false)
+        #expect(try await services.clubs.events(now: now).contains { $0.posterID == user.id } == false)
+        // Seeded events and other people's invites are untouched; friends and schedule stay.
+        #expect(try await services.clubs.events(now: now).isEmpty == false)
+        #expect(try await services.schedule.classes().count == classCount)
+        #expect(try await services.schedule.friends().count == friendCount)
+    }
+
+    @Test func resetDoesNothingInDemoMode() async throws {
+        let services = AppServices.preview()
+        try await services.clubs.joinClub(id: SampleData.aiClubID)
+        await services.enterDemoMode(account: nil)
+        try await services.resetMyActivity()
+        await services.exitDemoMode(refresh: false)
+        #expect(try await services.users.currentUser().joinedClubIDs.contains(SampleData.aiClubID))
+    }
+}
+
+/// Regression: Reset crashed the app with "backing data was detached from a context" because the
+/// Home and Invites screens still held the invites Reset had just deleted. View models now keep
+/// plain copies, which stay readable after the rows are gone.
+@MainActor
+struct ScreensSurviveDeletedDataTests {
+    @Test func invitesAndHomeKeepReadableCopiesAfterReset() async throws {
+        let services = AppServices.preview()
+        let now = Date()
+        let user = try await services.users.currentUser()
+        try await services.invites.post(OpenInvite(
+            title: "Mine", landmark: .thePit, category: .food, startTime: now.addingTimeInterval(3600),
+            expiresAt: now.addingTimeInterval(7200), hostID: user.id, hostName: user.displayName,
+            attendeeIDs: [user.id], recipientIDs: [SampleData.mayaID]))
+        let invites = InvitesViewModel()
+        let home = HomeViewModel()
+        await invites.load(services: services, now: now)
+        await home.load(services: services, now: now)
+        #expect(invites.invites.contains { $0.title == "Mine" })
+        // The screens must hold copies that belong to no database; a live model that is deleted
+        // while a screen holds it is the fatal "backing data was detached" read. (The simulator does
+        // not always crash on it, so check the cause directly.)
+        #expect(invites.invites.allSatisfy { $0.modelContext == nil })
+        #expect(home.activeInvites(at: now).allSatisfy { $0.modelContext == nil })
+
+        try await services.resetMyActivity()   // deletes the rows the screens just loaded
+
+        // The screens draw once more before they reload: reading must not crash.
+        for invite in invites.invites { _ = (invite.title, invite.attendeeIDs, invite.expiresAt, invite.hostName) }
+        for invite in home.activeInvites(at: now) { _ = (invite.title, invite.attendeeIDs, invite.capacity) }
+        #expect(invites.invites.contains { $0.title == "Mine" })   // still the old copy until reload
+        await invites.load(services: services, now: now)
+        #expect(invites.invites.contains { $0.title == "Mine" } == false)
+    }
+
+    @Test func friendsClassesAndClubsStayReadableAfterTheCacheIsWiped() async throws {
+        let services = AppServices.preview()
+        let now = Date()
+        let schedule = ScheduleViewModel()
+        let invites = InvitesViewModel()
+        let clubs = ClubsViewModel()
+        try await services.clubs.joinClub(id: SampleData.aiClubID)
+        await schedule.load(from: services.schedule)
+        await invites.load(services: services, now: now)
+        await clubs.load(services: services, now: now)
+        #expect(!schedule.classes.isEmpty && !invites.friends.isEmpty && !clubs.joinedClubs.isEmpty)
+        #expect(schedule.classes.allSatisfy { $0.modelContext == nil })
+        #expect(invites.friends.allSatisfy { $0.modelContext == nil })
+        #expect(clubs.joinedClubs.allSatisfy { $0.modelContext == nil })
+
+        try services.store.wipe()   // like a sign-out or an unfriend, under screens that are still up
+
+        for cls in schedule.classes { _ = (cls.courseCode, cls.title, cls.instructors, cls.building) }
+        for friend in invites.friends { _ = (friend.displayName, friend.classes) }
+        for club in clubs.joinedClubs { _ = (club.name, club.summary) }
+    }
+}

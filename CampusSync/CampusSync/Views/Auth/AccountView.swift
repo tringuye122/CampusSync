@@ -13,6 +13,9 @@ struct AccountView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var sharesSchedule = true
     @State private var isUpdatingSharing = false
+    @State private var confirmingReset = false
+    @State private var isResetting = false
+    @State private var resetMessage: String?
     @State private var sharingMessage: String?
     @State private var major = ""
     @State private var classYear = ""
@@ -99,12 +102,59 @@ struct AccountView: View {
                     Text("Swaps in demo friends, schedules and invites and sets the clock to Tue, Oct 13, 12:30 PM. Your account, sign-in and clubs stay live. Turn it off to delete the demo data and go back to live.")
                 }
                 Section {
+                    Button(role: .destructive) {
+                        confirmingReset = true
+                    } label: {
+                        HStack {
+                            Text("Reset my activity")
+                            if isResetting { Spacer(); ProgressView() }
+                        }
+                    }
+                    .disabled(services.isDemoMode || isResetting)
+                    .minTapTarget()
+                } header: {
+                    Text("Reset")
+                } footer: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(services.isDemoMode
+                             ? "Turn off Demo mode to reset your live activity."
+                             : "Between demos: removes the invites and club events you posted, your RSVPs and your club memberships. Your friends, schedule and account stay.")
+                        if let resetMessage {
+                            Text(resetMessage).foregroundStyle(Theme.textPrimary).fontWeight(.semibold)
+                        }
+                    }
+                }
+                Section {
                     Button("Sign out", role: .destructive) {
                         auth.signOut()
                         dismiss()
                     }
                     .minTapTarget()
                 }
+            }
+            .confirmationDialog("Reset your activity?", isPresented: $confirmingReset, titleVisibility: .visible) {
+                Button("Reset", role: .destructive) {
+                    isResetting = true
+                    resetMessage = nil
+                    Task {
+                        defer { isResetting = false }
+                        do {
+                            // Never spin forever: after 15 s the screen says so, and the reset (which
+                            // is already sent to the server) carries on in the background.
+                            try await withTimeout(seconds: 15, onTimeout: { ResetError.slow }) {
+                                try await services.resetMyActivity()
+                            }
+                            resetMessage = "Done. Your posts, RSVPs and club memberships are cleared."
+                        } catch ResetError.slow {
+                            resetMessage = "This is taking longer than expected. Check Invites and Clubs in a moment."
+                        } catch {
+                            resetMessage = "Couldn't reset. Try again."
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This deletes the invites and club events you posted, removes your RSVPs and leaves every club. It can't be undone.")
             }
             .scrollContentBackground(.hidden)
             .background(Theme.screenBackground)
@@ -120,6 +170,8 @@ struct AccountView: View {
         }
     }
 }
+
+private enum ResetError: Error { case slow }
 
 #Preview {
     let backend = MockAuthBackend(signedInEmail: "pat@unc.edu")
