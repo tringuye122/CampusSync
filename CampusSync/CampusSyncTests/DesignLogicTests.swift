@@ -298,16 +298,16 @@ struct DesignViewModelTests {
         #expect(viewModel.visibleItems(filter: .joined).isEmpty)
         #expect(viewModel.visibleItems(filter: .freeForMe).allSatisfy { $0.availability.isFree })
 
-        let film = try #require(viewModel.visibleItems(filter: .all).first { $0.clubID == SampleData.filmClubID })
+        let film = try #require(viewModel.visibleItems(filter: .all).first { $0.clubID == SampleData.aiClubID })
         await viewModel.act(on: film, services: services)           // free club: Join
         await viewModel.load(services: services, now: now)
-        #expect(viewModel.visibleItems(filter: .joined).map(\.clubID) == [SampleData.filmClubID])
+        #expect(viewModel.visibleItems(filter: .joined).map(\.clubID) == [SampleData.aiClubID])
 
         let robots = try #require(viewModel.visibleItems(filter: .all).first { $0.clubID == SampleData.robotsClubID })
         #expect(robots.access == .duesRequired)
         await viewModel.act(on: robots, services: services)          // dues club: Pay Dues (also joins)
         await viewModel.load(services: services, now: now)
-        #expect(Set(viewModel.visibleItems(filter: .joined).map(\.clubID)) == [SampleData.filmClubID, SampleData.robotsClubID])
+        #expect(Set(viewModel.visibleItems(filter: .joined).map(\.clubID)) == [SampleData.aiClubID, SampleData.robotsClubID])
         #expect(try await services.users.currentUser().isVerifiedMember)
     }
 

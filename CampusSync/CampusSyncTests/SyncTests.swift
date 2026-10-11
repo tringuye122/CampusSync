@@ -198,10 +198,12 @@ struct SyncTests {
             cls("NO DAYS", [], 600, 660, "B"),                              // TBA day: dropped
             cls("BACKWARDS", [.tue], 700, 650, "B"),                        // ends before it starts: dropped
             cls("PAST MIDNIGHT", [.wed], 1400, 1500, "B"),                  // dropped
-            cls("A VERY LONG COURSE CODE", [.thu], 600, 660, String(repeating: "x", count: 90)),   // trimmed, kept
+            cls("BIOL 101L", [.thu], 600, 660, String(repeating: "x", count: 90)),   // building trimmed, kept
+            cls("A VERY LONG COURSE CODE", [.fri], 600, 660, "B"),          // not a course code: dropped
+            cls("Tri Nguyen", [.fri], 600, 660, "B"),                       // free text: dropped
         ]
         let published = ScheduleSharing.publishable(classes)
-        #expect(published.map(\.courseCode) == ["COMP 100", "A VERY LONG "])
+        #expect(published.map(\.courseCode) == ["COMP 100", "BIOL 101L"])
         #expect(published.allSatisfy { $0.courseCode.count <= 12 && $0.building.count <= 60 })
     }
 

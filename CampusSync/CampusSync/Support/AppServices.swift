@@ -38,10 +38,13 @@ final class AppServices {
     private var demoWorld: DemoWorld?
     /// Demo worlds that have been left, kept alive on purpose. Screens still on display hold demo
     /// models for a moment after the switch, and reading a SwiftData model whose database has been
-    /// freed is a fatal error. Only the last few are kept, and the UI has long since rebuilt by then.
-    private(set) var retiredDemoWorldCount = 0
+    /// freed is a fatal error. All are kept for the life of the app: each is a small in-memory
+    /// store, and nothing then depends on how quickly the UI rebuilds.
     private var retiredDemoWorlds: [DemoWorld] = []
     private(set) var isDemoMode = false
+    /// True while switching between live and demo. Switches never overlap, so a refresh from one
+    /// cannot write live data (or a stale widget snapshot) into the other.
+    private(set) var isSwitchingDemo = false
     /// Bumped on every switch between live and demo, so the UI rebuilds and reloads from the new data.
     private(set) var demoGeneration = 0
     private static let demoModeKey = "CampusSync.demoMode"
@@ -88,12 +91,14 @@ final class AppServices {
     /// Live to demo: swaps in the demo friends, schedule and invites, sets the clock to the demo
     /// moment (Tue Oct 13, 12:30 PM) and rewrites the widget. Nothing is written to Firestore.
     func enterDemoMode(account: UserAccount?) async {
-        guard !isDemoMode else { return }
+        guard !isDemoMode, !isSwitchingDemo else { return }
+        isSwitchingDemo = true
+        defer { isSwitchingDemo = false }
         let world: DemoWorld
         do {
             world = try DemoWorld(account: account, liveUsers: liveRepositories.users, ratings: ratings)
         } catch {
-            print("Could not build the demo data: \(error)")
+            debugLog("Could not build the demo data: \(error)")
             return
         }
         demoWorld = world
@@ -109,21 +114,21 @@ final class AppServices {
     }
 
     /// Demo to live: stops using the demo data, clears the clock override, and refreshes from
-    /// Firestore. The demo world is retired, not freed (see `retiredDemoWorlds`).
-    func exitDemoMode() async {
+    /// Firestore. The demo world is retired, not freed (see `retiredDemoWorlds`). With
+    /// `refresh: false` (sign-out) it only leaves the demo and does not fetch.
+    func exitDemoMode(refresh: Bool = true) async {
         UserDefaults.standard.set(false, forKey: Self.demoModeKey)
         guard isDemoMode else { return }
+        isSwitchingDemo = true
+        defer { isSwitchingDemo = false }
         (users, schedule, invites, friends) = liveRepositories
-        if let world = demoWorld {
-            retiredDemoWorlds.append(world)
-            if retiredDemoWorlds.count > 3 { retiredDemoWorlds.removeFirst() }
-            retiredDemoWorldCount = retiredDemoWorlds.count
-        }
+        if let world = demoWorld { retiredDemoWorlds.append(world) }
         demoWorld = nil
         clock.clearOverride()
         isDemoMode = false
         demoGeneration += 1
         await syncWidget()
+        guard refresh else { return }
         // Let the rebuilt screens settle before the refresh rewrites cached friends and events
         // under them.
         try? await Task.sleep(for: .milliseconds(600))

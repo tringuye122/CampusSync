@@ -107,8 +107,10 @@ service cloud.firestore {
     }
 
     // Friend graph: users/{uid}/friends/{friendUID}. Exists on both sides. Only the
-    // owner reads their own list. A doc can be created only while an accepted request
-    // between the two people exists, which is what the accept batch writes first.
+    // owner reads their own list. A doc can be created only in the batch that accepts a
+    // pending request (pending before, accepted after). A stale accepted request left over
+    // from an earlier friendship therefore cannot be used to re-create a friendship the
+    // other person ended.
     match /users/{uid}/friends/{friendUID} {
       allow read: if isVerifiedStudent() && request.auth.uid == uid;
 
@@ -118,9 +120,11 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['since'])
         && request.resource.data.since == request.time
         && (
-          (existsAfter(/databases/$(database)/documents/friendRequests/$(uid + '_' + friendUID))
+          (exists(/databases/$(database)/documents/friendRequests/$(uid + '_' + friendUID))
+            && get(/databases/$(database)/documents/friendRequests/$(uid + '_' + friendUID)).data.status == 'pending'
             && getAfter(/databases/$(database)/documents/friendRequests/$(uid + '_' + friendUID)).data.status == 'accepted')
-          || (existsAfter(/databases/$(database)/documents/friendRequests/$(friendUID + '_' + uid))
+          || (exists(/databases/$(database)/documents/friendRequests/$(friendUID + '_' + uid))
+            && get(/databases/$(database)/documents/friendRequests/$(friendUID + '_' + uid)).data.status == 'pending'
             && getAfter(/databases/$(database)/documents/friendRequests/$(friendUID + '_' + uid)).data.status == 'accepted')
         );
 
@@ -138,18 +142,36 @@ service cloud.firestore {
     // meeting (not a list) because rules cannot loop over a list, so the exact-keys check
     // below is what enforces that nothing else can be stored. Readable by the owner and
     // by accepted friends; the friends doc is the proof of friendship.
+    function validWeekday(d) {
+      return d is int && d >= 2 && d <= 6;   // Monday (2) to Friday (6)
+    }
+
+    // Rules cannot loop over a list, so each possible position (at most five) is checked.
+    function validWeekdays(w) {
+      return w is list && w.size() >= 1 && w.size() <= 5
+        && validWeekday(w[0])
+        && (w.size() < 2 || validWeekday(w[1]))
+        && (w.size() < 3 || validWeekday(w[2]))
+        && (w.size() < 4 || validWeekday(w[3]))
+        && (w.size() < 5 || validWeekday(w[4]));
+    }
+
     match /schedules/{uid}/meetings/{meetingId} {
       allow read: if isVerifiedStudent()
         && (request.auth.uid == uid
             || exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid)));
 
+      // Ids are m0...m39 (the app publishes at most 40 meetings), the course code has the
+      // shape "COMP 301" or "BIOL 101L", and weekdays are 2 to 6. Together these leave no room
+      // for a title, a name or an ID in a field.
       allow create, update: if isVerifiedStudent()
         && request.auth.uid == uid
+        && meetingId.matches('m([0-9]|[1-3][0-9])')
         && request.resource.data.keys().hasOnly(['courseCode', 'weekdays', 'startMinutes', 'endMinutes', 'building'])
-        && request.resource.data.courseCode is string && request.resource.data.courseCode.size() <= 12
+        && request.resource.data.courseCode is string
+        && request.resource.data.courseCode.matches('[A-Z]{3,4} [0-9]{3}[A-Z]?')
         && request.resource.data.building is string && request.resource.data.building.size() <= 60
-        && request.resource.data.weekdays is list
-        && request.resource.data.weekdays.size() >= 1 && request.resource.data.weekdays.size() <= 5
+        && validWeekdays(request.resource.data.weekdays)
         && request.resource.data.startMinutes is int
         && request.resource.data.endMinutes is int
         && request.resource.data.startMinutes >= 0
@@ -183,6 +205,9 @@ service cloud.firestore {
         && request.resource.data.startTime is timestamp
         && request.resource.data.expiresAt is timestamp
         && request.resource.data.expiresAt > request.resource.data.startTime
+        // Not far in the past or future (an hour of slack for a "starts now" invite).
+        && request.resource.data.startTime > request.time - duration.value(1, 'h')
+        && request.resource.data.startTime < request.time + duration.value(60, 'd')
         && request.resource.data.capacity is int
         && request.resource.data.capacity >= 2 && request.resource.data.capacity <= 50
         && request.resource.data.recipientIDs is list
@@ -203,15 +228,41 @@ service cloud.firestore {
 
     // MARK: Clubs
     //
-    // Clubs and their events are public to any verified student and written only by the
-    // admin seeding script (which bypasses rules), never by a client.
+    // Clubs are public to any verified student and written only by the admin seeding script
+    // (which bypasses rules), never by a client. A club's events are public too. A member of
+    // the club can post an event, which takes the club's name and access; only the poster can
+    // remove it, and events cannot be edited.
     match /clubs/{clubId} {
       allow read: if isVerifiedStudent();
       allow write: if false;
 
       match /events/{eventId} {
         allow read: if isVerifiedStudent();
-        allow write: if false;
+
+        allow create: if isVerifiedStudent()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid)/memberships/$(clubId))
+          && request.resource.data.keys().hasOnly([
+               'title', 'details', 'location', 'startTime', 'endTime',
+               'access', 'duesAmount', 'clubName', 'posterID'])
+          && request.resource.data.posterID == request.auth.uid
+          && request.resource.data.clubName == get(/databases/$(database)/documents/clubs/$(clubId)).data.name
+          && request.resource.data.access == get(/databases/$(database)/documents/clubs/$(clubId)).data.access
+          && request.resource.data.duesAmount == get(/databases/$(database)/documents/clubs/$(clubId)).data.duesAmount
+          && request.resource.data.title is string
+          && request.resource.data.title.size() >= 1 && request.resource.data.title.size() <= 80
+          && request.resource.data.details is string && request.resource.data.details.size() <= 300
+          && request.resource.data.location is string
+          && request.resource.data.location.size() >= 1 && request.resource.data.location.size() <= 60
+          && request.resource.data.startTime is timestamp
+          && request.resource.data.endTime is timestamp
+          && request.resource.data.endTime > request.resource.data.startTime
+          && request.resource.data.startTime > request.time - duration.value(1, 'h')
+          && request.resource.data.startTime < request.time + duration.value(365, 'd');
+
+        allow update: if false;
+
+        allow delete: if isVerifiedStudent()
+          && resource.data.get('posterID', '') == request.auth.uid;
       }
     }
 

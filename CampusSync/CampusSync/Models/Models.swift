@@ -368,6 +368,8 @@ final class ClubEvent {
     var access: ClubAccess
     /// Whole dollars.
     var duesAmount: Int
+    /// Additive (club event posting): who posted it. Empty for seeded events, which no one owns.
+    var posterID: String = ""
 
     init(
         id: String = UUID().uuidString,
@@ -379,7 +381,8 @@ final class ClubEvent {
         startTime: Date,
         endTime: Date? = nil,
         access: ClubAccess,
-        duesAmount: Int = 0
+        duesAmount: Int = 0,
+        posterID: String = ""
     ) {
         self.id = id
         self.clubID = clubID
@@ -391,6 +394,7 @@ final class ClubEvent {
         self.endTime = endTime ?? startTime.addingTimeInterval(3600)
         self.access = access
         self.duesAmount = duesAmount
+        self.posterID = posterID
     }
 }
 

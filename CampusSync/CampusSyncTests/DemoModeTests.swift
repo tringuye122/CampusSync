@@ -96,12 +96,12 @@ struct DemoModeTests {
     @Test func clubMembershipStaysLive() async throws {
         let services = make()
         let live = try await services.users.currentUser()
-        live.joinedClubIDs = ["seed-club-film"]
+        live.joinedClubIDs = ["seed-club-ai"]
         live.isVerifiedMember = true
 
         await services.enterDemoMode(account: account)
         let demoUser = try await services.users.currentUser()
-        #expect(demoUser.joinedClubIDs == ["seed-club-film"] && demoUser.isVerifiedMember)
+        #expect(demoUser.joinedClubIDs == ["seed-club-ai"] && demoUser.isVerifiedMember)
     }
 
     @Test func demoModeIsRememberedUntilItIsTurnedOff() async {
@@ -133,10 +133,30 @@ struct DemoModeTests {
 
         await services.exitDemoMode()
 
-        #expect(services.retiredDemoWorldCount == 1)   // kept alive, not freed
         // Old screens are still on display for a moment and read these.
         #expect(friends.map(\.displayName).contains("Maya Patel"))
         #expect(invites.first?.title.isEmpty == false)
         #expect(classes.count == 4)
+    }
+
+    /// Many quick switches: every demo world stays readable, whenever a slow screen reads it.
+    @Test func manyTogglesKeepEveryRetiredWorldReadable() async throws {
+        let services = make()
+        var held: [[FriendProfile]] = []
+        for _ in 0..<6 {
+            await services.enterDemoMode(account: account)
+            held.append(try await services.schedule.friends())
+            await services.exitDemoMode(refresh: false)
+        }
+        for friends in held { #expect(friends.map(\.displayName).contains("Maya Patel")) }
+        #expect(!services.isSwitchingDemo)
+    }
+
+    @Test func signOutLeavesDemoWithoutRefreshing() async {
+        let services = make()
+        await services.enterDemoMode(account: account)
+        await services.exitDemoMode(refresh: false)
+        #expect(!services.isDemoMode)
+        #expect(!AppServices.wantsDemoMode)
     }
 }

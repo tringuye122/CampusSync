@@ -20,11 +20,11 @@ enum SampleData {
     static let jordanID = "seed-user-jordan"
     static let samID = "seed-user-sam"
 
+    static let aiClubID = "seed-club-ai"
+    static let csSGClubID = "seed-club-cssg"
     static let robotsClubID = "seed-club-robots"
-    static let debateClubID = "seed-club-debate"
-    static let filmClubID = "seed-club-film"
-    static let chessClubID = "seed-club-chess"
-    static let culinaryClubID = "seed-club-culinary"
+    static let appTeamClubID = "seed-club-appteam"
+    static let arvrClubID = "seed-club-arvr"
 
     // MARK: Time helpers
 
@@ -138,25 +138,25 @@ enum SampleData {
         ]
     }
 
-    // MARK: Clubs (invented organizations)
+    // MARK: Clubs (names are real campus clubs; the summaries, dues and events are placeholders)
 
     static func clubs() -> [Club] {
         [
-            Club(id: robotsClubID, name: "Blue Ridge Robotics",
-                 summary: "Build and battle small robots every semester.",
+            Club(id: aiClubID, name: "AI@UNC",
+                 summary: "Talks, workshops and projects on artificial intelligence, open to everyone.",
+                 symbol: "brain.head.profile", access: .public),
+            Club(id: csSGClubID, name: "CS+SG",
+                 summary: "Computer science students building projects and community together.",
+                 symbol: "person.3.fill", access: .membersOnly),
+            Club(id: robotsClubID, name: "Rams Robotics",
+                 summary: "Design, build and test robots as a team.",
                  symbol: "gearshape.2.fill", access: .duesRequired, duesAmount: 25),
-            Club(id: debateClubID, name: "Lantern Debate Society",
-                 summary: "Weekly practice rounds and tournament prep for members.",
-                 symbol: "bubble.left.and.bubble.right.fill", access: .membersOnly),
-            Club(id: filmClubID, name: "Night Reel Film Club",
-                 summary: "Free screenings and discussion, everyone welcome.",
-                 symbol: "film.fill", access: .public),
-            Club(id: chessClubID, name: "Quad Chess Union",
-                 summary: "Casual games and a monthly tournament.",
-                 symbol: "crown.fill", access: .public),
-            Club(id: culinaryClubID, name: "Tidewater Culinary Circle",
-                 summary: "Cooking nights and recipe swaps.",
-                 symbol: "frying.pan.fill", access: .duesRequired, duesAmount: 15),
+            Club(id: appTeamClubID, name: "App Team",
+                 summary: "Build and ship mobile apps with fellow students.",
+                 symbol: "iphone", access: .duesRequired, duesAmount: 15),
+            Club(id: arvrClubID, name: "AR/VR UNC",
+                 summary: "Explore augmented and virtual reality with demos and builds.",
+                 symbol: "cube.fill", access: .public),
         ]
     }
 
@@ -164,21 +164,21 @@ enum SampleData {
         func hours(_ h: Int) -> Date { now.addingTimeInterval(TimeInterval(h * 3600)) }
         // `hours(n) + 1800` below means n hours and 30 minutes.
         return [
-            ClubEvent(clubID: filmClubID, clubName: "Night Reel Film Club",
-                      title: "Friday night screening", details: "A surprise classic. Popcorn provided.",
-                      location: "Student Union Auditorium", startTime: hours(5), endTime: hours(7), access: .public),
-            ClubEvent(clubID: robotsClubID, clubName: "Blue Ridge Robotics",
-                      title: "Build night GBM", details: "Kickoff for the spring bot. Bring a laptop.",
+            ClubEvent(clubID: aiClubID, clubName: "AI@UNC",
+                      title: "General meeting", details: "An intro to what we are working on this semester. Pizza provided.",
+                      location: "Sitterson Hall", startTime: hours(5), endTime: hours(7), access: .public),
+            ClubEvent(clubID: robotsClubID, clubName: "Rams Robotics",
+                      title: "Build night", details: "Kickoff for the next robot. Bring a laptop.",
                       location: "Sitterson Hall", startTime: hours(8), endTime: hours(9) + 1800, access: .duesRequired, duesAmount: 25),
-            ClubEvent(clubID: debateClubID, clubName: "Lantern Debate Society",
-                      title: "Practice rounds", details: "Members-only scrimmage, two topics.",
-                      location: "Dey Hall", startTime: hours(22), endTime: hours(23), access: .membersOnly),
-            ClubEvent(clubID: chessClubID, clubName: "Quad Chess Union",
-                      title: "Open play and ladder", details: "All levels. Boards provided.",
-                      location: "The Pit", startTime: hours(27), endTime: hours(28) + 1800, access: .public),
-            ClubEvent(clubID: culinaryClubID, clubName: "Tidewater Culinary Circle",
-                      title: "Pasta night", details: "Cook together, then eat together.",
-                      location: "Student Union Kitchen", startTime: hours(50), endTime: hours(52), access: .duesRequired, duesAmount: 15),
+            ClubEvent(clubID: csSGClubID, clubName: "CS+SG",
+                      title: "Study group", details: "Members-only study session and project help.",
+                      location: "Phillips Hall", startTime: hours(22), endTime: hours(23), access: .membersOnly),
+            ClubEvent(clubID: arvrClubID, clubName: "AR/VR UNC",
+                      title: "Headset demo night", details: "Try the latest builds. All experience levels.",
+                      location: "Davis Library", startTime: hours(27), endTime: hours(28) + 1800, access: .public),
+            ClubEvent(clubID: appTeamClubID, clubName: "App Team",
+                      title: "Sprint planning", details: "Plan the next release together.",
+                      location: "Fred Brooks Building", startTime: hours(50), endTime: hours(52), access: .duesRequired, duesAmount: 15),
         ]
     }
 

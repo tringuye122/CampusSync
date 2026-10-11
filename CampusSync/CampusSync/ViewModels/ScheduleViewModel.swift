@@ -19,6 +19,9 @@ final class ScheduleViewModel {
     /// RateMyProfessors results by first-listed instructor, filled by `loadRatings`.
     private(set) var ratings: [String: ProfessorRatingLookup] = [:]
 
+    /// Joined clubs' events and RSVP'd invites, drawn on the timetable beside classes.
+    private(set) var calendarEvents: [CalendarEvent] = []
+
     let settings: FreeSlotSettings
 
     init(settings: FreeSlotSettings = .standard) {
@@ -38,6 +41,20 @@ final class ScheduleViewModel {
         } catch {
             errorMessage = "Couldn't load your schedule."
         }
+    }
+
+    /// Events of clubs I joined and invites I RSVP'd to. A failure just leaves the timetable with classes only.
+    func loadEvents(services: AppServices, now: Date) async {
+        guard let user = try? await services.users.currentUser() else { calendarEvents = []; return }
+        let clubEvents = (try? await services.clubs.events(now: now)) ?? []
+        let invites = (try? await services.invites.activeInvites(now: now)) ?? []
+        calendarEvents = CalendarEvents.build(
+            clubEvents: clubEvents, joinedClubIDs: Set(user.joinedClubIDs),
+            invites: invites, rsvpedIDs: Set(user.rsvpedInviteIDs))
+    }
+
+    func events(on day: Weekday, now: Date) -> [CalendarEvent] {
+        CalendarEvents.events(calendarEvents, on: day, now: now)
     }
 
     /// Looks up every first-listed instructor, a few at a time. Results are cached on disk by the

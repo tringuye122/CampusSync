@@ -2,7 +2,7 @@
 //  ScheduleStatus.swift
 //  CampusSync
 //
-//  "What am I doing right now?" for the Home banner, and later the widget's
+//  "What am I doing right now?" for the Home banner and the widget's
 //  timeline. It works on SnapshotMeeting so the app and widget share one code
 //  path, and it takes `now` as input (always from AppClock). Must stay free of
 //  model types so it can be a member of both the app and widget targets.

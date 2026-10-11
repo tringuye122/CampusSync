@@ -42,15 +42,15 @@ struct CampusSyncApp: App {
     }
 
     /// The SwiftData store is only a cache. Bump this name whenever the schema changes in a
-    /// way SwiftData cannot migrate (v2: UUID -> String ids, v3: ClubEvent.endTime). The old file is never opened,
+    /// way SwiftData cannot migrate (v2: UUID -> String ids, v3: ClubEvent.endTime, v4: ClubEvent.posterID). The old file is never opened,
     /// so there is nothing to migrate; seeding and Firestore refill the new cache.
-    private static let storeName = "CampusSyncCache-v3"
+    private static let storeName = "CampusSyncCache-v4"
 
     private static func makeContainer() -> ModelContainer {
         let schema = Schema(AppSchema.models)
         let configuration = ModelConfiguration(storeName, schema: schema)
         // Earlier cache files are never opened again; remove them.
-        for legacy in ["default", "CampusSyncCache-v2"] {
+        for legacy in ["default", "CampusSyncCache-v2", "CampusSyncCache-v3"] {
             removeStoreFiles(named: legacy, besides: configuration.url)
         }
 
@@ -59,12 +59,19 @@ struct CampusSyncApp: App {
         }
         // The new store exists but will not open (corrupt, or a later schema change that was
         // not renamed). It is only a cache, so delete it and start empty.
-        print("SwiftData cache could not be opened; rebuilding it.")
+        debugLog("SwiftData cache could not be opened; rebuilding it.")
         removeStoreFiles(named: storeName, besides: nil, directory: configuration.url.deletingLastPathComponent())
         do {
             return try ModelContainer(for: schema, configurations: configuration)
         } catch {
-            fatalError("Could not create the SwiftData container: \(error)")
+            // Disk full or no permission. The store is only a cache, so run from memory rather than crash.
+            debugLog("Could not create the SwiftData cache on disk (\(error)); using memory.")
+            let memory = ModelConfiguration(isStoredInMemoryOnly: true)
+            do {
+                return try ModelContainer(for: schema, configurations: memory)
+            } catch {
+                fatalError("Could not create the SwiftData container: \(error)")
+            }
         }
     }
 
@@ -78,7 +85,7 @@ struct CampusSyncApp: App {
             do {
                 try FileManager.default.removeItem(at: url)
             } catch {
-                print("Could not remove \(url.lastPathComponent): \(error)")
+                debugLog("Could not remove \(url.lastPathComponent): \(error)")
             }
         }
     }
@@ -106,10 +113,16 @@ struct CampusSyncApp: App {
                         Task { await services.enterDemoMode(account: account) }
                     }
                 } else if case .signedOut = auth.state {
-                    Task { await services.exitDemoMode() }
                     // Only on an explicit sign-out. While auth is still loading at launch the
                     // account is nil too, and the offline cache must survive that.
-                    services.sync.stop(wipeCache: true)
+                    services.sync.stop(wipeCache: false)
+                    Task {
+                        await services.exitDemoMode(refresh: false)
+                        // Wipe once the screens have swapped to the signed-out view: deleting rows
+                        // that a screen on display still holds is a fatal read.
+                        try? await Task.sleep(for: .milliseconds(400))
+                        if auth.account == nil { services.sync.stop(wipeCache: true) }   // not if they signed straight back in
+                    }
                 }
             }
             .task {

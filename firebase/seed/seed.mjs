@@ -4,7 +4,8 @@
 // Usage (from firebase/):
 //   npm run seed -- clubs                         # into the LOCAL emulator (start it first)
 //   npm run seed -- invites --host <uid> --host-name "Pat Example" --to <uid>,<uid>
-//   npm run seed -- clubs --real                  # into the REAL project (see below)
+//   npm run seed -- clubs --real --confirm campussync-780a5
+//                                                 # into the REAL project (clubs only; see below)
 //   npm run seed -- demo --as-of 2026-10-13T12:30 --friend-with you@unc.edu[,other@unc.edu]
 //                                                 # the demo cast: accounts, friends, schedules,
 //                                                 # invites, clubs, all timed from --as-of
@@ -45,8 +46,22 @@ if (!commands.includes(command)) {
 const touchesAuth = ['demo', 'reset-demo', 'verify'].includes(command)
 
 if (real) {
-  if (process.env.FIRESTORE_EMULATOR_HOST) {
-    console.error('--real was given but FIRESTORE_EMULATOR_HOST is set. Unset it to write to the real project.')
+  // Only fictional clubs and events may go to the real project. The other commands create
+  // verified accounts, friend them to real users or flip email verification, so they stay
+  // emulator-only (the demo accounts for a recording are made through the emulator or by hand).
+  if (command !== 'clubs') {
+    console.error(`--real is only allowed with the clubs command. "${command}" changes accounts or friendships and must run against the emulator.`)
+    process.exit(1)
+  }
+  // Any emulator variable would silently send some calls to the emulator and others to production.
+  const emulatorVars = Object.keys(process.env).filter((name) => name.endsWith('_EMULATOR_HOST'))
+  if (emulatorVars.length > 0) {
+    console.error(`--real was given but ${emulatorVars.join(', ')} is set. Unset it to write to the real project.`)
+    process.exit(1)
+  }
+  console.log(`About to write fictional clubs and events to the REAL project ${PROJECT_ID}.`)
+  if (flag('confirm') !== PROJECT_ID) {
+    console.error(`Re-run with --confirm ${PROJECT_ID} to proceed.`)
     process.exit(1)
   }
   initializeApp({ credential: applicationDefault(), projectId: PROJECT_ID })
@@ -73,21 +88,22 @@ const asOf = parseAsOf(flag('as-of'))
 const now = asOf.getTime()
 const hours = (h) => Timestamp.fromMillis(now + h * 3600 * 1000)
 
-// Same ids as SampleData.swift, so the local seed and Firestore line up.
+// Same ids as SampleData.swift, so the local seed and Firestore line up. The club names are real
+// campus clubs; the summaries, access, dues and events are placeholders.
 const clubs = [
-  { id: 'seed-club-robots', name: 'Blue Ridge Robotics', summary: 'Build and battle small robots every semester.', symbol: 'gearshape.2.fill', access: 'duesRequired', duesAmount: 25 },
-  { id: 'seed-club-debate', name: 'Lantern Debate Society', summary: 'Weekly practice rounds and tournament prep for members.', symbol: 'bubble.left.and.bubble.right.fill', access: 'membersOnly', duesAmount: 0 },
-  { id: 'seed-club-film', name: 'Night Reel Film Club', summary: 'Free screenings and discussion, everyone welcome.', symbol: 'film.fill', access: 'public', duesAmount: 0 },
-  { id: 'seed-club-chess', name: 'Quad Chess Union', summary: 'Casual games and a monthly tournament.', symbol: 'crown.fill', access: 'public', duesAmount: 0 },
-  { id: 'seed-club-culinary', name: 'Tidewater Culinary Circle', summary: 'Cooking nights and recipe swaps.', symbol: 'frying.pan.fill', access: 'duesRequired', duesAmount: 15 },
+  { id: 'seed-club-ai', name: 'AI@UNC', summary: 'Talks, workshops and projects on artificial intelligence, open to everyone.', symbol: 'brain.head.profile', access: 'public', duesAmount: 0 },
+  { id: 'seed-club-cssg', name: 'CS+SG', summary: 'Computer science students building projects and community together.', symbol: 'person.3.fill', access: 'membersOnly', duesAmount: 0 },
+  { id: 'seed-club-robots', name: 'Rams Robotics', summary: 'Design, build and test robots as a team.', symbol: 'gearshape.2.fill', access: 'duesRequired', duesAmount: 25 },
+  { id: 'seed-club-appteam', name: 'App Team', summary: 'Build and ship mobile apps with fellow students.', symbol: 'iphone', access: 'duesRequired', duesAmount: 15 },
+  { id: 'seed-club-arvr', name: 'AR/VR UNC', summary: 'Explore augmented and virtual reality with demos and builds.', symbol: 'cube.fill', access: 'public', duesAmount: 0 },
 ]
 
 const events = [
-  { id: 'seed-event-film', club: 'seed-club-film', title: 'Friday night screening', details: 'A surprise classic. Popcorn provided.', location: 'Student Union Auditorium', start: 5, length: 2, access: 'public', duesAmount: 0 },
-  { id: 'seed-event-robots', club: 'seed-club-robots', title: 'Build night GBM', details: 'Kickoff for the spring bot. Bring a laptop.', location: 'Sitterson Hall', start: 8, length: 1.5, access: 'duesRequired', duesAmount: 25 },
-  { id: 'seed-event-debate', club: 'seed-club-debate', title: 'Practice rounds', details: 'Members-only scrimmage, two topics.', location: 'Dey Hall', start: 22, length: 1, access: 'membersOnly', duesAmount: 0 },
-  { id: 'seed-event-chess', club: 'seed-club-chess', title: 'Open play and ladder', details: 'All levels. Boards provided.', location: 'The Pit', start: 27, length: 1.5, access: 'public', duesAmount: 0 },
-  { id: 'seed-event-culinary', club: 'seed-club-culinary', title: 'Pasta night', details: 'Cook together, then eat together.', location: 'Student Union Kitchen', start: 50, length: 2, access: 'duesRequired', duesAmount: 15 },
+  { id: 'seed-event-ai', club: 'seed-club-ai', title: 'General meeting', details: 'An intro to what we are working on this semester. Pizza provided.', location: 'Sitterson Hall', start: 5, length: 2, access: 'public', duesAmount: 0 },
+  { id: 'seed-event-robots', club: 'seed-club-robots', title: 'Build night', details: 'Kickoff for the next robot. Bring a laptop.', location: 'Sitterson Hall', start: 8, length: 1.5, access: 'duesRequired', duesAmount: 25 },
+  { id: 'seed-event-cssg', club: 'seed-club-cssg', title: 'Study group', details: 'Members-only study session and project help.', location: 'Phillips Hall', start: 22, length: 1, access: 'membersOnly', duesAmount: 0 },
+  { id: 'seed-event-arvr', club: 'seed-club-arvr', title: 'Headset demo night', details: 'Try the latest builds. All experience levels.', location: 'Davis Library', start: 27, length: 1.5, access: 'public', duesAmount: 0 },
+  { id: 'seed-event-appteam', club: 'seed-club-appteam', title: 'Sprint planning', details: 'Plan the next release together.', location: 'Fred Brooks Building', start: 50, length: 2, access: 'duesRequired', duesAmount: 15 },
 ]
 
 async function seedClubs() {

@@ -83,7 +83,7 @@ struct FoundationTests {
         #expect(user.isVerifiedMember)
         #expect(user.joinedClubIDs.contains(SampleData.robotsClubID))
         await #expect(throws: RepositoryError.self) {
-            try await clubs.payDues(clubID: SampleData.filmClubID)
+            try await clubs.payDues(clubID: SampleData.aiClubID)
         }
     }
 

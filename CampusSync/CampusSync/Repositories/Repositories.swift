@@ -3,9 +3,9 @@
 //  CampusSync
 //
 //  Views and ViewModels talk only to these protocols, never to SwiftData or
-//  Firestore. Methods are async throws so a Firestore implementation can swap in
-//  later. Writes here do not touch the widget; ViewModels rewrite the snapshot
-//  and reload timelines after a successful write.
+//  Firestore. Methods are async throws because the Firestore implementations need it.
+//  Writes here do not touch the widget; ViewModels rewrite the snapshot and reload
+//  timelines after a successful write.
 //
 
 import Foundation
@@ -15,6 +15,8 @@ enum RepositoryError: Error {
     case notFound
     case inviteFull
     case notDuesClub
+    /// Posting an event needs membership in that club.
+    case notMember
 }
 
 /// The signed-in user. One demo user in the MVP.
@@ -55,4 +57,31 @@ protocol ClubRepository {
     func joinClub(id: String) async throws
     /// One tap: flips local state and marks the profile a Verified Member. No real payment.
     func payDues(clubID: String) async throws
+    /// Leaving removes the membership; leaving a dues club also clears the dues-paid state
+    /// (and so the Verified Member badge, unless another dues club is still paid).
+    func leaveClub(id: String) async throws
+    /// Posts an event for a club the user has joined. The event takes the club's access and dues.
+    @discardableResult
+    func postEvent(_ draft: ClubEventDraft) async throws -> ClubEvent
+    /// Removes an event the user posted.
+    func deleteEvent(id: String) async throws
+}
+
+/// What the Post sheet collects for a new club event.
+struct ClubEventDraft: Equatable {
+    var clubID: String
+    var title: String
+    var details = ""
+    var location: String
+    var start: Date
+    var durationMinutes = 60
+
+    var end: Date { start.addingTimeInterval(TimeInterval(durationMinutes * 60)) }
+    /// The same limits the Firestore rules enforce.
+    var isValid: Bool {
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let place = location.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !clubID.isEmpty && (1...80).contains(name.count) && (1...60).contains(place.count)
+            && details.count <= 300 && durationMinutes > 0
+    }
 }

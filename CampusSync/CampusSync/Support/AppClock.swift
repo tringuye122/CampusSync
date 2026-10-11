@@ -53,16 +53,3 @@ nonisolated extension Date {
         calendar.component(.weekday, from: self)
     }
 }
-
-// MARK: - Environment
-
-private struct AppClockKey: EnvironmentKey {
-    static let defaultValue = AppClock()
-}
-
-extension EnvironmentValues {
-    var appClock: AppClock {
-        get { self[AppClockKey.self] }
-        set { self[AppClockKey.self] = newValue }
-    }
-}

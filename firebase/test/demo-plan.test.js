@@ -94,13 +94,21 @@ describe('what the seeded data does under the real rules', () => {
     for (const person of cast) {
       const db = student(person.uid)
       for (const [index, meeting] of person.meetings.entries()) {
-        await assertSucceeds(setDoc(doc(db, `schedules/${person.uid}/meetings/check-${index}`), meeting))
+        await assertSucceeds(setDoc(doc(db, `schedules/${person.uid}/meetings/m${index}`), meeting))
       }
     }
   })
 
   it('stores invites in a shape the rules accept when the host creates them', async () => {
     const [path, invite] = Object.entries(plan).find(([p]) => p.startsWith('invites/'))
-    await assertSucceeds(setDoc(doc(student(invite.hostID), `${path}-check`), invite))
+    // The rules only accept an invite that starts within a window of the real "now", so shift the
+    // plan's times (set for the demo moment) to the present before checking its shape.
+    const shift = Date.now() - asOf.getTime()
+    const shifted = {
+      ...invite,
+      startTime: new Date(invite.startTime.getTime() + shift),
+      expiresAt: new Date(invite.expiresAt.getTime() + shift),
+    }
+    await assertSucceeds(setDoc(doc(student(invite.hostID), `${path}-check`), shifted))
   })
 })

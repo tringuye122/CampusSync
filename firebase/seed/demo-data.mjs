@@ -76,7 +76,7 @@ export function buildDemoPlan({ asOf, realUsers }) {
       createdAt: asOf,
     })
     set(`handles/${person.handle}`, { uid: person.uid })
-    person.meetings.forEach((meeting, index) => set(`schedules/${person.uid}/meetings/${index}`, meeting))
+    person.meetings.forEach((meeting, index) => set(`schedules/${person.uid}/meetings/m${index}`, meeting))
 
     for (const real of realUsers) {
       if (person.friend) {

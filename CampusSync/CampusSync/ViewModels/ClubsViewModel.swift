@@ -32,16 +32,22 @@ final class ClubsViewModel {
         var end: Date
         var availability: ClubAvailability
         var isJoined: Bool
+        /// I posted this event, so I can remove it.
+        var isMine = false
     }
 
     private(set) var items: [Item] = []
+    /// Clubs I have joined: the ones an event can be posted for.
+    private(set) var joinedClubs: [Club] = []
     var errorMessage: String?
 
     func load(services: AppServices, now: Date) async {
         do {
             let clubs = Dictionary(uniqueKeysWithValues: try await services.clubs.clubs().map { ($0.id, $0) })
             let events = try await services.clubs.events(now: now)
-            let joined = Set(try await services.users.currentUser().joinedClubIDs)
+            let user = try await services.users.currentUser()
+            let joined = Set(user.joinedClubIDs)
+            joinedClubs = clubs.values.filter { joined.contains($0.id) }.sorted { $0.name < $1.name }
             let slots = ((try? await services.schedule.classes()) ?? []).map(ClassSlot.init)
 
             items = events.map { event in
@@ -57,7 +63,8 @@ final class ClubsViewModel {
                     start: event.startTime,
                     end: event.endTime,
                     availability: ClubAvailability.check(eventStart: event.startTime, eventEnd: event.endTime, classes: slots),
-                    isJoined: joined.contains(event.clubID))
+                    isJoined: joined.contains(event.clubID),
+                    isMine: !event.posterID.isEmpty && event.posterID == user.id)
             }
             .sorted { $0.start < $1.start }
             errorMessage = nil
@@ -71,6 +78,38 @@ final class ClubsViewModel {
         case .all: items
         case .freeForMe: items.filter { $0.availability.isFree }
         case .joined: items.filter(\.isJoined)
+        }
+    }
+
+    /// Leave a joined club. A dues club also loses its dues-paid state (and the Verified Member badge).
+    func leave(_ item: Item, services: AppServices) async {
+        do {
+            try await services.clubs.leaveClub(id: item.clubID)
+            await services.syncWidget()
+        } catch {
+            errorMessage = "Couldn't leave the club. Try again."
+        }
+    }
+
+    func post(_ draft: ClubEventDraft, services: AppServices, now: Date) async {
+        do {
+            try await services.clubs.postEvent(draft)
+            await load(services: services, now: now)
+            await services.syncWidget()
+        } catch RepositoryError.notMember {
+            errorMessage = "Join the club first, then you can post its events."
+        } catch {
+            errorMessage = "Couldn't post the event. Try again."
+        }
+    }
+
+    func delete(_ item: Item, services: AppServices, now: Date) async {
+        do {
+            try await services.clubs.deleteEvent(id: item.id)
+            await load(services: services, now: now)
+            await services.syncWidget()
+        } catch {
+            errorMessage = "Couldn't remove the event. Try again."
         }
     }
 

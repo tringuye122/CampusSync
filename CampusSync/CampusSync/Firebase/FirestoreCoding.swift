@@ -94,6 +94,22 @@ enum FirestoreCoding {
             startTime: start,
             endTime: (data["endTime"] as? Timestamp)?.dateValue(),   // nil: an hour after the start
             access: (data["access"] as? String).flatMap(ClubAccess.init(rawValue:)) ?? .public,
-            duesAmount: data["duesAmount"] as? Int ?? 0)
+            duesAmount: data["duesAmount"] as? Int ?? 0,
+            posterID: data["posterID"] as? String ?? "")
+    }
+
+    /// A posted club event (clubs/{clubID}/events/{id}). Keys match the rules exactly.
+    static func data(for event: ClubEvent) -> [String: Any] {
+        [
+            "title": event.title,
+            "details": event.details,
+            "location": event.location,
+            "startTime": Timestamp(date: event.startTime),
+            "endTime": Timestamp(date: event.endTime),
+            "access": event.access.rawValue,
+            "duesAmount": event.duesAmount,
+            "clubName": event.clubName,
+            "posterID": event.posterID,
+        ]
     }
 }

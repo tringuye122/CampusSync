@@ -10,6 +10,7 @@ import SwiftUI
 
 struct ClubEventCardView: View {
     let item: ClubsViewModel.Item
+    /// Join / Pay Dues, or (when already a member) leave the club.
     let onAction: () -> Void
 
     var body: some View {
@@ -70,12 +71,13 @@ struct ClubEventCardView: View {
     private var availabilityBar: some View {
         switch item.availability {
         case .free:
+            // Dark green with white text in light and dark mode (the Success token turns light in dark).
             Label("You are free then", systemImage: "checkmark")
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(Theme.navy)
+                .foregroundStyle(Color.white)
                 .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
-                .background(Theme.carolinaBlue, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Theme.ratingGood, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         case let .conflict(code, start, end):
             Label("Conflicts with \(code) · \(FreeWindowSummary.classRange(start, end))", systemImage: "xmark")
                 .font(.subheadline.weight(.bold))
@@ -90,12 +92,21 @@ struct ClubEventCardView: View {
     @ViewBuilder
     private var actionButton: some View {
         if item.isJoined {
-            Label(item.access == .duesRequired ? "Dues paid" : "Joined", systemImage: "checkmark.circle.fill")
-                .font(.headline)
+            // The same button toggles: tap again to leave.
+            Button(action: onAction) {
+                VStack(spacing: 0) {
+                    Label(item.access == .duesRequired ? "Dues paid" : "Joined", systemImage: "checkmark.circle.fill")
+                        .font(.headline)
+                    Text("Tap to leave")
+                        .font(.caption)
+                }
                 .foregroundStyle(Theme.textPrimary)
                 .frame(maxWidth: .infinity, minHeight: 56)
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.navy, lineWidth: 2))
-                .accessibilityLabel(item.access == .duesRequired ? "Dues paid, you are a member" : "You joined this club")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(item.access == .duesRequired ? "Dues paid, you are a member" : "You joined this club")
+            .accessibilityHint("Leaves the club")
         } else {
             Button(action: onAction) {
                 Text(item.access == .duesRequired ? "Pay Dues · $\(item.duesAmount)" : "Join Club")
@@ -121,12 +132,12 @@ struct ClubEventCardView: View {
 #Preview {
     let now = AppClock().now
     let base = ClubsViewModel.Item(
-        id: "1", clubID: "c1", clubName: "Quad Chess Union", access: .public, duesAmount: 0,
+        id: "1", clubID: "c1", clubName: "AR/VR UNC", access: .public, duesAmount: 0,
         eventTitle: "General meeting", location: "Student Union, Rm 2518",
         start: now.addingTimeInterval(7200), end: now.addingTimeInterval(10800),
         availability: .free, isJoined: false)
     var dues = base
-    dues.id = "2"; dues.clubName = "Blue Ridge Robotics"; dues.access = .duesRequired; dues.duesAmount = 25
+    dues.id = "2"; dues.clubName = "Rams Robotics"; dues.access = .duesRequired; dues.duesAmount = 25
     dues.availability = .conflict(courseCode: "LING 460", startMinutes: 17 * 60, endMinutes: 18 * 60 + 15)
     var joined = base
     joined.id = "3"; joined.access = .membersOnly; joined.isJoined = true

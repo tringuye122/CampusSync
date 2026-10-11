@@ -3,14 +3,24 @@
 //  CampusSync
 //
 //  SwiftData-backed implementations of the repository protocols, seeded from
-//  SampleData. Fully offline. The Firestore versions will implement the same
-//  protocols later.
+//  SampleData. Fully offline. They are the cache the Firestore repositories read and write,
+//  and the previews', tests' and offline fallback.
 //
 
 import Foundation
 import SwiftData
 
-/// Seeds and resets the local store.
+/// Seeds the local store.
+extension ModelContext {
+    /// The one cached student profile, or `notSeeded` when there is none (signed out).
+    func currentUserProfile() throws -> UserProfile {
+        guard let user = try fetch(FetchDescriptor<UserProfile>()).first else {
+            throw RepositoryError.notSeeded
+        }
+        return user
+    }
+}
+
 @MainActor
 struct LocalDataStore {
     let context: ModelContext
@@ -45,17 +55,6 @@ struct LocalDataStore {
         return true
     }
 
-    /// Wipes everything and reseeds. Invite and event times are regenerated relative to `now`.
-    func resetToSeed(now: Date) throws {
-        try context.delete(model: UserProfile.self)
-        try context.delete(model: ClassSchedule.self)
-        try context.delete(model: FriendProfile.self)
-        try context.delete(model: OpenInvite.self)
-        try context.delete(model: Club.self)
-        try context.delete(model: ClubEvent.self)
-        try insertSeed(now: now)
-    }
-
     private func insertSeed(now: Date) throws {
         context.insert(SampleData.user())
         SampleData.classes().forEach(context.insert)
@@ -75,12 +74,7 @@ final class LocalUserRepository: UserRepository {
         self.context = context
     }
 
-    func currentUser() async throws -> UserProfile {
-        guard let user = try context.fetch(FetchDescriptor<UserProfile>()).first else {
-            throw RepositoryError.notSeeded
-        }
-        return user
-    }
+    func currentUser() async throws -> UserProfile { try context.currentUserProfile() }
 }
 
 @MainActor
@@ -125,12 +119,7 @@ final class LocalScheduleRepository: ScheduleRepository {
         await ratings.rating(for: instructor)
     }
 
-    private func currentUser() throws -> UserProfile {
-        guard let user = try context.fetch(FetchDescriptor<UserProfile>()).first else {
-            throw RepositoryError.notSeeded
-        }
-        return user
-    }
+    private func currentUser() throws -> UserProfile { try context.currentUserProfile() }
 }
 
 @MainActor
@@ -170,12 +159,7 @@ final class LocalInviteRepository: InviteRepository {
         try context.save()
     }
 
-    private func currentUser() throws -> UserProfile {
-        guard let user = try context.fetch(FetchDescriptor<UserProfile>()).first else {
-            throw RepositoryError.notSeeded
-        }
-        return user
-    }
+    private func currentUser() throws -> UserProfile { try context.currentUserProfile() }
 }
 
 @MainActor
@@ -217,14 +201,45 @@ final class LocalClubRepository: ClubRepository {
         try context.save()
     }
 
+    func leaveClub(id: String) async throws {
+        let user = try currentUser()
+        user.joinedClubIDs.removeAll { $0 == id }
+        // A joined dues club was joined by paying, so any dues club still joined keeps the badge.
+        let remaining = Set(user.joinedClubIDs)
+        let paidClubs = try context.fetch(FetchDescriptor<Club>()).filter { $0.access == .duesRequired && remaining.contains($0.id) }
+        user.isVerifiedMember = !paidClubs.isEmpty
+        try context.save()
+    }
+
+    @discardableResult
+    func postEvent(_ draft: ClubEventDraft) async throws -> ClubEvent {
+        let user = try currentUser()
+        guard let club = try club(id: draft.clubID) else { throw RepositoryError.notFound }
+        guard user.joinedClubIDs.contains(club.id) else { throw RepositoryError.notMember }
+        let event = ClubEvent(
+            clubID: club.id, clubName: club.name,
+            title: draft.title.trimmingCharacters(in: .whitespacesAndNewlines),
+            details: draft.details.trimmingCharacters(in: .whitespacesAndNewlines),
+            location: draft.location.trimmingCharacters(in: .whitespacesAndNewlines),
+            startTime: draft.start, endTime: draft.end,
+            access: club.access, duesAmount: club.duesAmount, posterID: user.id)
+        context.insert(event)
+        try context.save()
+        return event
+    }
+
+    func deleteEvent(id: String) async throws {
+        let user = try currentUser()
+        guard let event = try context.fetch(FetchDescriptor<ClubEvent>(predicate: #Predicate { $0.id == id })).first
+        else { throw RepositoryError.notFound }
+        guard event.posterID == user.id else { throw RepositoryError.notMember }
+        context.delete(event)
+        try context.save()
+    }
+
     private func club(id: String) throws -> Club? {
         try context.fetch(FetchDescriptor<Club>(predicate: #Predicate { $0.id == id })).first
     }
 
-    private func currentUser() throws -> UserProfile {
-        guard let user = try context.fetch(FetchDescriptor<UserProfile>()).first else {
-            throw RepositoryError.notSeeded
-        }
-        return user
-    }
+    private func currentUser() throws -> UserProfile { try context.currentUserProfile() }
 }

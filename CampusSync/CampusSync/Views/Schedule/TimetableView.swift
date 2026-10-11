@@ -25,6 +25,9 @@ struct TimetableView: View {
                 ForEach(viewModel.classes(on: day)) { cls in
                     classBlock(cls, metrics: metrics)
                 }
+                ForEach(viewModel.events(on: day, now: now)) { event in
+                    eventBlock(event, metrics: metrics)
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -52,6 +55,36 @@ struct TimetableView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             "\(cls.courseCode), \(cls.startMinutes.clockString) to \(cls.endMinutes.clockString), \(location(of: cls))")
+    }
+
+    /// A joined club's event or an invite you are going to: solid navy, so it stands apart from
+    /// Carolina Blue classes and dashed free time. Drawn on top, inset so a class under it still shows.
+    private func eventBlock(_ event: CalendarEvent, metrics: TimelineMetrics) -> some View {
+        let calendar = Calendar.current
+        let start = event.start.minutesSinceMidnight(in: calendar)
+        let end = calendar.isDate(event.end, inSameDayAs: event.start) ? event.end.minutesSinceMidnight(in: calendar) : 24 * 60
+        let symbol = event.kind == .club ? "person.3.fill" : "paperplane.fill"
+        return VStack(alignment: .leading, spacing: 1) {
+            Label(event.title, systemImage: symbol)
+                .font(.subheadline.weight(.heavy))
+                .lineLimit(1)
+            Text("\(start.clockString) – \(end.clockString) · \(event.place)")
+                .font(.footnote)
+                .lineLimit(1)
+        }
+        .foregroundStyle(Color.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(height: max(36, metrics.height(from: start, to: end) - 3), alignment: .top)
+        .background(Theme.navy, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 1))
+        .clipped()
+        .padding(.leading, 36)
+        .offset(y: metrics.y(start) + 1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "\(event.kind == .club ? "Club event" : "Plan"): \(event.title), \(start.clockString) to \(end.clockString), \(event.place)")
     }
 
     private func freeBlock(_ slot: FreeSlot, metrics: TimelineMetrics) -> some View {

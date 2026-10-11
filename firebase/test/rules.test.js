@@ -366,6 +366,30 @@ describe('friendships', () => {
     await assertFails(setDoc(doc(student('bob'), 'users', 'bob', 'friends', 'ann'), { since: serverTimestamp() }))
   })
 
+  it('refuses re-creating a friendship from a stale accepted request', async () => {
+    // Ann and Bob were friends, Ann unfriended Bob but the accepted request was left behind.
+    await seedRequest('ann', 'bob', 'accepted')
+    const bob = student('bob')
+    const batch = writeBatch(bob)
+    batch.set(doc(bob, 'users', 'bob', 'friends', 'ann'), { since: serverTimestamp() })
+    batch.set(doc(bob, 'users', 'ann', 'friends', 'bob'), { since: serverTimestamp() })
+    await assertFails(batch.commit())
+    await assertFails(setDoc(doc(student('ann'), 'users', 'ann', 'friends', 'bob'), { since: serverTimestamp() }))
+  })
+
+  it('lets a friendship be created again after a clean unfriend and a new request', async () => {
+    await seedRequest('ann', 'bob')
+    await accept(student('bob'), 'ann', 'bob')
+    const ann = student('ann')
+    const unfriend = writeBatch(ann)
+    unfriend.delete(doc(ann, 'users', 'ann', 'friends', 'bob'))
+    unfriend.delete(doc(ann, 'users', 'bob', 'friends', 'ann'))
+    unfriend.delete(doc(ann, 'friendRequests', 'ann_bob'))
+    await assertSucceeds(unfriend.commit())
+    await seedRequest('ann', 'bob')
+    await assertSucceeds(accept(student('bob'), 'ann', 'bob'))
+  })
+
   it('refuses a stranger writing a friendship between two other people', async () => {
     await seedRequest('ann', 'bob', 'accepted')
     await assertFails(setDoc(doc(student('eve'), 'users', 'ann', 'friends', 'bob'), { since: serverTimestamp() }))
@@ -431,17 +455,28 @@ describe('shared schedule', () => {
 
   it('refuses course titles, instructors or anything beyond meeting times', async () => {
     const db = student('ann')
-    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ title: 'Software Engineering Lab' })))
-    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ instructors: ['Someone'] })))
-    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ studentID: '123' })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm9'), meeting({ title: 'Software Engineering Lab' })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm9'), meeting({ instructors: ['Someone'] })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm9'), meeting({ studentID: '123' })))
   })
 
   it('refuses malformed times and long strings', async () => {
     const db = student('ann')
-    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ endMinutes: 800 })))
-    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ endMinutes: 1500 })))
-    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ weekdays: [] })))
-    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'x'), meeting({ building: 'x'.repeat(61) })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm9'), meeting({ endMinutes: 800 })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm9'), meeting({ endMinutes: 1500 })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm9'), meeting({ weekdays: [] })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm9'), meeting({ building: 'x'.repeat(61) })))
+  })
+
+  it('refuses free text hidden in course codes, weekdays or meeting ids', async () => {
+    const db = student('ann')
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm9'), meeting({ courseCode: 'Software Eng' })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm9'), meeting({ courseCode: '123456789' })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm9'), meeting({ weekdays: ['Tri Nguyen'] })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm9'), meeting({ weekdays: [2, 9] })))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'secret-note'), meeting()))
+    await assertFails(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm40'), meeting()))
+    await assertSucceeds(setDoc(doc(db, 'schedules', 'ann', 'meetings', 'm39'), meeting({ courseCode: 'BIOL 101L', weekdays: [2, 3, 4, 5, 6] })))
   })
 
   it('lets the owner and accepted friends read, and no one else', async () => {
@@ -499,6 +534,12 @@ describe('friend invites', () => {
   it('refuses a spoofed host or host name', async () => {
     await assertFails(setDoc(doc(student('eve'), 'invites', 'i1'), invite()))
     await assertFails(setDoc(doc(student('ann'), 'invites', 'i1'), invite({ hostName: 'Someone Else' })))
+  })
+
+  it('refuses an invite starting long ago or far in the future', async () => {
+    const db = student('ann')
+    await assertFails(setDoc(doc(db, 'invites', 'i1'), invite({ startTime: inSeconds(-86400), expiresAt: inSeconds(-80000) })))
+    await assertFails(setDoc(doc(db, 'invites', 'i1'), invite({ startTime: inSeconds(90 * 86400), expiresAt: inSeconds(90 * 86400 + 3600) })))
   })
 
   it('refuses invalid invites', async () => {
@@ -570,6 +611,60 @@ describe('clubs and memberships', () => {
     await assertFails(getDoc(doc(outsider('ann'), 'clubs', 'free')))
     await assertFails(setDoc(doc(student('ann'), 'clubs', 'new'), { name: 'x', access: 'public' }))
     await assertFails(setDoc(doc(student('ann'), 'clubs', 'free', 'events', 'e2'), { title: 'x' }))
+  })
+
+  describe('posting club events', () => {
+    const event = (overrides = {}) => ({
+      title: 'Build night',
+      details: 'Bring a laptop.',
+      location: 'Sitterson Hall',
+      startTime: inSeconds(3600),
+      endTime: inSeconds(7200),
+      access: 'public',
+      duesAmount: 0,
+      clubName: 'free',
+      posterID: 'ann',
+      ...overrides,
+    })
+    const join = (uid, club) => env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', uid, 'memberships', club), { joinedAt: new Date(), duesPaid: false })
+    })
+
+    it('lets a member post an event, and only a member', async () => {
+      await assertFails(setDoc(doc(student('ann'), 'clubs', 'free', 'events', 'p1'), event()))   // not joined
+      await join('ann', 'free')
+      await assertSucceeds(setDoc(doc(student('ann'), 'clubs', 'free', 'events', 'p1'), event()))
+      await assertFails(setDoc(doc(student('ann'), 'clubs', 'paid', 'events', 'p2'), event({ clubName: 'paid', access: 'duesRequired', duesAmount: 25 })))
+    })
+
+    it('takes the club\'s name, access and dues, and the poster\'s own id', async () => {
+      await join('ann', 'free')
+      const db = student('ann')
+      await assertFails(setDoc(doc(db, 'clubs', 'free', 'events', 'p1'), event({ clubName: 'Other club' })))
+      await assertFails(setDoc(doc(db, 'clubs', 'free', 'events', 'p1'), event({ access: 'duesRequired', duesAmount: 25 })))
+      await assertFails(setDoc(doc(db, 'clubs', 'free', 'events', 'p1'), event({ posterID: 'eve' })))
+    })
+
+    it('refuses malformed events', async () => {
+      await join('ann', 'free')
+      const db = student('ann')
+      await assertFails(setDoc(doc(db, 'clubs', 'free', 'events', 'p1'), event({ title: '' })))
+      await assertFails(setDoc(doc(db, 'clubs', 'free', 'events', 'p1'), event({ title: 'x'.repeat(81) })))
+      await assertFails(setDoc(doc(db, 'clubs', 'free', 'events', 'p1'), event({ location: '' })))
+      await assertFails(setDoc(doc(db, 'clubs', 'free', 'events', 'p1'), event({ details: 'x'.repeat(301) })))
+      await assertFails(setDoc(doc(db, 'clubs', 'free', 'events', 'p1'), event({ endTime: inSeconds(10) })))
+      await assertFails(setDoc(doc(db, 'clubs', 'free', 'events', 'p1'), event({ startTime: inSeconds(-86400), endTime: inSeconds(-80000) })))
+      await assertFails(setDoc(doc(db, 'clubs', 'free', 'events', 'p1'), event({ extra: true })))
+    })
+
+    it('lets only the poster remove an event, and nobody edit one', async () => {
+      await join('ann', 'free')
+      await assertSucceeds(setDoc(doc(student('ann'), 'clubs', 'free', 'events', 'p1'), event()))
+      await assertFails(updateDoc(doc(student('ann'), 'clubs', 'free', 'events', 'p1'), { title: 'Changed' }))
+      await assertFails(deleteDoc(doc(student('eve'), 'clubs', 'free', 'events', 'p1')))
+      await assertFails(deleteDoc(doc(student('ann'), 'clubs', 'free', 'events', 'e1')))   // seeded: no poster
+      await assertSucceeds(deleteDoc(doc(student('ann'), 'clubs', 'free', 'events', 'p1')))
+    })
   })
 
   it('lets a student join a club and leave it', async () => {

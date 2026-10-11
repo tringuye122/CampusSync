@@ -20,6 +20,22 @@ final class FirestoreFriendRepository: FriendRepository {
         return uid
     }
 
+    /// Firestore's async writes wait for the server and never finish while offline, which would
+    /// leave a screen spinning. Race the operation against a timeout and report it as offline.
+    /// (The write stays queued and goes through when the connection returns.)
+    static func timed<T>(seconds: Double = 8, _ operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(for: .seconds(seconds))
+                throw FriendError.offline
+            }
+            defer { group.cancelAll() }
+            guard let first = try await group.next() else { throw FriendError.unknown }
+            return first
+        }
+    }
+
     // MARK: Search
 
     /// Handles that start with `prefix`, as you type. One range query on the handle document
@@ -66,16 +82,19 @@ final class FirestoreFriendRepository: FriendRepository {
             if sent.contains(where: { $0.status == .pending }) { throw FriendError.requestPending }
             let incoming = try await incomingRequests()
             if incoming.contains(where: { $0.fromUID == student.id }) { throw FriendError.requestPending }
-            for stale in sent {
-                try await db.collection("friendRequests").document(stale.id).delete()
+            let db = self.db
+            try await Self.timed {
+                for stale in sent {
+                    try await db.collection("friendRequests").document(stale.id).delete()
+                }
+                let id = FriendRequest.makeID(from: me, to: student.id)
+                try await db.collection("friendRequests").document(id).setData([
+                    "fromUID": me,
+                    "toUID": student.id,
+                    "status": FriendRequestStatus.pending.rawValue,
+                    "createdAt": FieldValue.serverTimestamp(),
+                ])
             }
-            let id = FriendRequest.makeID(from: me, to: student.id)
-            try await db.collection("friendRequests").document(id).setData([
-                "fromUID": me,
-                "toUID": student.id,
-                "status": FriendRequestStatus.pending.rawValue,
-                "createdAt": FieldValue.serverTimestamp(),
-            ])
         } catch {
             throw Self.map(error)
         }
@@ -162,7 +181,7 @@ final class FirestoreFriendRepository: FriendRepository {
                               forDocument: db.collection("users").document(owner)
                                 .collection("friends").document(friend))
             }
-            try await batch.commit()
+            try await Self.timed { try await batch.commit() }
         } catch {
             throw await explainDenial(error, requestID: request.id, field: "toUID")
         }
@@ -172,8 +191,8 @@ final class FirestoreFriendRepository: FriendRepository {
         let me = try myUID()
         guard request.toUID == me else { throw FriendError.permissionDenied }
         do {
-            try await db.collection("friendRequests").document(request.id)
-                .updateData(["status": FriendRequestStatus.declined.rawValue])
+            let reference = db.collection("friendRequests").document(request.id)
+            try await Self.timed { try await reference.updateData(["status": FriendRequestStatus.declined.rawValue]) }
         } catch {
             throw await explainDenial(error, requestID: request.id, field: "toUID")
         }
@@ -183,7 +202,8 @@ final class FirestoreFriendRepository: FriendRepository {
         let me = try myUID()
         guard request.fromUID == me else { throw FriendError.permissionDenied }
         do {
-            try await db.collection("friendRequests").document(request.id).delete()
+            let reference = db.collection("friendRequests").document(request.id)
+            try await Self.timed { try await reference.delete() }
         } catch {
             // Already gone is what the student wanted, so it is not an error.
             let reason = await explainDenial(error, requestID: request.id, field: "fromUID")
@@ -210,24 +230,22 @@ final class FirestoreFriendRepository: FriendRepository {
         }
     }
 
-    /// Removes both friend docs and the answered request, so no one-sided friendship
-    /// or stale accepted request is left behind.
+    /// Removes both friend docs and the accepted request in one batch, so a stale accepted request
+    /// cannot outlive the friendship (the rules also refuse to build a friendship from one).
     func unfriend(_ friend: FriendSummary) async throws {
         let me = try myUID()
         do {
+            // Only requests that exist and that I may delete: ones I sent, or answered ones sent to me
+            // (a pending one sent to me cannot be deleted by me, and deleting a missing doc is denied).
+            let between = try await rawRequests(field: "fromUID", equals: me).filter { $0.toUID == friend.id }
+                + rawRequests(field: "toUID", equals: me).filter { $0.fromUID == friend.id && $0.status != .pending }
             let batch = db.batch()
             batch.deleteDocument(db.collection("users").document(me).collection("friends").document(friend.id))
             batch.deleteDocument(db.collection("users").document(friend.id).collection("friends").document(me))
-            try await batch.commit()
-            // Clear the request that made us friends, in whichever direction it exists, so
-            // no stale accepted request is left (it would block sending a new one). Only
-            // requests that exist are deleted: deleting a missing document is denied.
-            // Best-effort: the friendship itself is already gone.
-            let between = try await rawRequests(field: "fromUID", equals: me).filter { $0.toUID == friend.id }
-                + rawRequests(field: "toUID", equals: me).filter { $0.fromUID == friend.id }
             for request in between {
-                try? await db.collection("friendRequests").document(request.id).delete()
+                batch.deleteDocument(db.collection("friendRequests").document(request.id))
             }
+            try await Self.timed { try await batch.commit() }
         } catch {
             throw Self.map(error)
         }

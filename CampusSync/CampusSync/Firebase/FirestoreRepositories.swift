@@ -20,7 +20,7 @@ private var signedInUID: String? { Auth.auth().currentUser?.uid }
 
 private func logWrite(_ what: String) -> (Error?) -> Void {
     { error in
-        if let error { print("Firestore write failed (\(what)): \(error.localizedDescription)") }
+        if let error { debugLog("Firestore write failed (\(what)): \(error.localizedDescription)") }
     }
 }
 
@@ -38,6 +38,7 @@ enum ScheduleSharing {
     static func publishable(_ classes: [ClassSchedule]) -> [ClassMeeting] {
         classes.map(\.meeting).compactMap { meeting in
             guard !meeting.weekdays.isEmpty,
+                  isPublishableCourseCode(meeting.courseCode),
                   meeting.startMinutes >= 0,
                   meeting.endMinutes > meeting.startMinutes,
                   meeting.endMinutes <= 1440
@@ -47,6 +48,11 @@ enum ScheduleSharing {
             clean.building = String(meeting.building.prefix(60))
             return clean
         }
+    }
+
+    /// "COMP 301" or "BIOL 101L": the shape the rules accept, so a stray string can never ride along.
+    static func isPublishableCourseCode(_ code: String) -> Bool {
+        code.wholeMatch(of: /[A-Z]{3,4} [0-9]{3}[A-Z]?/) != nil
     }
 
     /// Replaces the published meetings with `classes` (or removes them all when sharing is off).
@@ -172,6 +178,29 @@ final class FirestoreClubRepository: ClubRepository {
             membership.updateData(["duesPaid": true], completion: logWrite("pay dues"))
         } else {
             membership.setData(["joinedAt": FieldValue.serverTimestamp(), "duesPaid": true], completion: logWrite("pay dues"))
+        }
+    }
+
+    func leaveClub(id: String) async throws {
+        let user = try await users.currentUser()
+        try await local.leaveClub(id: id)
+        db.collection("users").document(user.id).collection("memberships").document(id)
+            .delete(completion: logWrite("leave club"))
+    }
+
+    func postEvent(_ draft: ClubEventDraft) async throws -> ClubEvent {
+        let event = try await local.postEvent(draft)
+        db.collection("clubs").document(event.clubID).collection("events").document(event.id)
+            .setData(FirestoreCoding.data(for: event), completion: logWrite("post club event"))
+        return event
+    }
+
+    func deleteEvent(id: String) async throws {
+        let clubID = try await local.events(now: .distantPast).first { $0.id == id }?.clubID
+        try await local.deleteEvent(id: id)
+        if let clubID {
+            db.collection("clubs").document(clubID).collection("events").document(id)
+                .delete(completion: logWrite("delete club event"))
         }
     }
 }

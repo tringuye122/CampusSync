@@ -85,6 +85,8 @@ struct AppHeader: View {
         }
         .font(.footnote.weight(.semibold))
         .foregroundStyle(Theme.textPrimary)
+        .lineLimit(1)
+        .fixedSize()   // one line, never wrapped inside the capsule
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .background(Theme.pillBackground, in: Capsule())
@@ -96,6 +98,8 @@ struct AppHeader: View {
         Label("Demo mode", systemImage: "play.rectangle.fill")
             .font(.footnote.weight(.semibold))
             .foregroundStyle(Theme.cautionText)
+            .lineLimit(1)
+            .fixedSize()   // icon and text stay on one line
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(Theme.cautionSurface, in: Capsule())
@@ -105,6 +109,8 @@ struct AppHeader: View {
         Text("Verified Member")
             .font(.footnote.weight(.semibold))
             .foregroundStyle(Theme.textPrimary)
+            .lineLimit(1)
+            .fixedSize()
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(Theme.pillBackground, in: Capsule())

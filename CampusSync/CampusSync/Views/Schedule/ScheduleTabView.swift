@@ -86,6 +86,7 @@ struct ScheduleTabView: View {
 
     private func reload() async {
         await viewModel.load(from: services.schedule)
+        await viewModel.loadEvents(services: services, now: clock.now)
         await viewModel.loadRatings(from: services.schedule)
     }
 

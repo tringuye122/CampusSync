@@ -24,9 +24,6 @@ import SwiftData
 final class SyncCoordinator {
     /// Bumped after every mirrored change. Views observe it to reload from the cache.
     private(set) var changeCount = 0
-    private(set) var isRunning = false
-    /// The most recent listener error, for diagnostics (a dev menu can show it).
-    private(set) var lastError: String?
 
     /// Rewrites the widget snapshot and reloads timelines. Set by `AppServices`.
     @ObservationIgnored var onChange: (() async -> Void)?
@@ -41,6 +38,10 @@ final class SyncCoordinator {
     // can both host invites and be invited to others.
     @ObservationIgnored private var hostedInvites: [String: [String: Any]] = [:]
     @ObservationIgnored private var receivedInvites: [String: [String: Any]] = [:]
+    /// Which invite listeners have delivered at least once. Until both have, an invite missing
+    /// from the merge may just not have arrived yet, so nothing is deleted from the cache.
+    @ObservationIgnored private var hostedDelivered = false
+    @ObservationIgnored private var receivedDelivered = false
     @ObservationIgnored private var friendIDs: [String] = []
     /// Guards against an older friend fetch overwriting a newer one.
     @ObservationIgnored private var friendFetchGeneration = 0
@@ -63,7 +64,7 @@ final class SyncCoordinator {
         do {
             cacheWasReset = try store.adoptAccount(account)
         } catch {
-            lastError = "Could not prepare the local cache: \(error.localizedDescription)"
+            debugLog("Could not prepare the local cache: \(error.localizedDescription)")
         }
         // Kept classes from before a sign-out: make sure the server copy matches (once per sign-in,
         // not at every launch, since it is a batch of writes).
@@ -71,7 +72,6 @@ final class SyncCoordinator {
             ScheduleSharing.publish(classes: classes)
         }
         uid = account.uid
-        isRunning = true
         listen(uid: account.uid)
         didChange()
     }
@@ -80,10 +80,13 @@ final class SyncCoordinator {
     func stop(wipeCache: Bool) {
         stopListening()
         uid = nil
-        isRunning = false
         hostedInvites = [:]
         receivedInvites = [:]
         friendIDs = []
+        clubNames = [:]
+        // A friend fetch still in flight belongs to the account that just left; invalidate it so it
+        // cannot write that account's friends into the next one's cache.
+        friendFetchGeneration += 1
         if wipeCache {
             // Server-sourced data goes (it includes friends' schedules); the student's own
             // imported classes stay for their next sign-in.
@@ -95,6 +98,8 @@ final class SyncCoordinator {
     private func stopListening() {
         listeners.forEach { $0.remove() }
         listeners = []
+        hostedDelivered = false
+        receivedDelivered = false
     }
 
     /// Listeners fire in bursts (cache then server, five of them at launch), so changes are
@@ -117,10 +122,12 @@ final class SyncCoordinator {
         let invites = db.collection("invites")
         add(invites.whereField("hostID", isEqualTo: uid), name: "hosted invites") { [weak self] docs in
             self?.hostedInvites = docs
+            self?.hostedDelivered = true
             self?.reconcileInvites()
         }
         add(invites.whereField("recipientIDs", arrayContains: uid), name: "received invites") { [weak self] docs in
             self?.receivedInvites = docs
+            self?.receivedDelivered = true
             self?.reconcileInvites()
         }
         add(db.collection("users").document(uid).collection("friends"), name: "friends") { [weak self] docs in
@@ -140,8 +147,7 @@ final class SyncCoordinator {
         let registration = query.addSnapshotListener { [weak self] snapshot, error in
             guard let self else { return }
             if let error {
-                self.lastError = "\(name): \(error.localizedDescription)"
-                print("Firestore listener failed (\(name)): \(error.localizedDescription)")
+                debugLog("Firestore listener failed (\(name)): \(error.localizedDescription)")
                 return
             }
             guard let snapshot else { return }
@@ -182,10 +188,20 @@ final class SyncCoordinator {
             }
         }
         // Anything no longer on the server (deleted, or an optimistic write the rules rejected).
-        for (id, invite) in existing where remote[id] == nil { context.delete(invite) }
-
-        localUser?.rsvpedInviteIDs = remote.compactMap { id, data in
-            (data["attendeeIDs"] as? [String])?.contains(uid) == true ? id : nil
+        // Only once both queries have answered: at launch one usually lands first, and the other's
+        // invites would otherwise be deleted and then reappear.
+        let complete = hostedDelivered && receivedDelivered
+        if complete {
+            for (id, invite) in existing where remote[id] == nil { context.delete(invite) }
+            localUser?.rsvpedInviteIDs = remote.compactMap { id, data in
+                (data["attendeeIDs"] as? [String])?.contains(uid) == true ? id : nil
+            }
+        } else if let user = localUser {
+            // Partial view: add RSVPs the arrived query shows, but never drop the cached ones.
+            let going = remote.compactMap { id, data in
+                (data["attendeeIDs"] as? [String])?.contains(uid) == true ? id : nil
+            }
+            user.rsvpedInviteIDs = Array(Set(user.rsvpedInviteIDs).union(going))
         }
         save()
     }
@@ -226,11 +242,11 @@ final class SyncCoordinator {
                             let docs = try await db.collection("schedules").document(id).collection("meetings").getDocuments()
                             return (id, name, docs.documents.compactMap { FirestoreCoding.meeting(data: $0.data()) })
                         } catch {
-                            print("Could not load schedule of friend \(id): \(error.localizedDescription)")
+                            debugLog("Could not load schedule of friend \(id): \(error.localizedDescription)")
                             return (id, name, nil)
                         }
                     } catch {
-                        print("Could not load friend \(id): \(error.localizedDescription)")
+                        debugLog("Could not load friend \(id): \(error.localizedDescription)")
                         return nil
                     }
                 }
@@ -319,6 +335,7 @@ final class SyncCoordinator {
                 current.endTime = fresh.endTime
                 current.access = fresh.access
                 current.duesAmount = fresh.duesAmount
+                current.posterID = fresh.posterID
             } else {
                 context.insert(fresh)
             }
@@ -331,7 +348,7 @@ final class SyncCoordinator {
         do {
             try context.save()
         } catch {
-            lastError = "Could not save the local cache: \(error.localizedDescription)"
+            debugLog("Could not save the local cache: \(error.localizedDescription)")
         }
         didChange()
     }

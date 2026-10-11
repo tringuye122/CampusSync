@@ -71,6 +71,7 @@ struct AccountView: View {
                         }))
                         .tint(Theme.success)
                         .minTapTarget()
+                        .disabled(services.isSwitchingDemo)   // a switch finishes before the next starts
                 } header: {
                     Text("Demo")
                 } footer: {
